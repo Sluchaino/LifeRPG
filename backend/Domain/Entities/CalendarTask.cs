@@ -14,12 +14,14 @@ namespace Domain.Entities
         public string? Details { get; set; }
         public Difficulty Difficulty { get; set; }
         public bool IsCompleted { get; set; }
+        public Guid? HabitId { get; set; }
         public TimeOnly? StartTime { get; set; }
         public TimeOnly? EndTime { get; set; }
         public DateTime CreatedAtUtc { get; set; }
         public DateTime UpdatedAtUtc { get; set; }
 
         public User User { get; set; } = default!;
+        public Habit? Habit { get; set; }
         public List<CalendarTaskAttribute> Attributes { get; set; } = new();
         public List<CalendarTaskSkill> Skills { get; set; } = new();
     }

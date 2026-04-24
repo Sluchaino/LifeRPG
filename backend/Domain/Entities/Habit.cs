@@ -14,6 +14,7 @@ namespace Domain.Entities
         public DateTime UpdatedAtUtc { get; set; }
 
         public User User { get; set; } = default!;
+        public List<CalendarTask> CalendarTasks { get; set; } = new();
         public List<HabitCompletion> Completions { get; set; } = new();
     }
 }

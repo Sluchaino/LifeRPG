@@ -32,6 +32,8 @@ namespace Infrastructure.Persistence.Configurations
                 .HasDefaultValue(false)
                 .IsRequired();
 
+            builder.Property(x => x.HabitId);
+
             builder.Property(x => x.StartTime);
             builder.Property(x => x.EndTime);
 
@@ -50,6 +52,11 @@ namespace Infrastructure.Persistence.Configurations
                 .WithOne(x => x.CalendarTask)
                 .HasForeignKey(x => x.CalendarTaskId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.Habit)
+                .WithMany(x => x.CalendarTasks)
+                .HasForeignKey(x => x.HabitId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             builder.HasIndex(x => new { x.UserId, x.Date });
         }

@@ -41,6 +41,7 @@ namespace LifeRPG.API.Endpoints
                 .Where(x => x.UserId == userId.Value && x.Date == parsedDate)
                 .Include(x => x.Attributes)
                 .Include(x => x.Skills)
+                .Include(x => x.Habit)
                 .OrderBy(x => x.StartTime ?? TimeOnly.MaxValue)
                 .ThenBy(x => x.Title)
                 .Select(x => new CalendarTaskResponse(
@@ -59,7 +60,9 @@ namespace LifeRPG.API.Endpoints
                     x.Skills
                         .OrderBy(s => s.UserSkillId)
                         .Select(s => s.UserSkillId)
-                        .ToList()))
+                        .ToList(),
+                    x.HabitId,
+                    x.Habit != null ? x.Habit.Name : null))
                 .ToListAsync(cancellationToken);
 
             return Results.Ok(tasks);
@@ -95,6 +98,7 @@ namespace LifeRPG.API.Endpoints
                 .Where(x => x.UserId == userId.Value && x.Date >= fromDate && x.Date <= toDate)
                 .Include(x => x.Attributes)
                 .Include(x => x.Skills)
+                .Include(x => x.Habit)
                 .OrderBy(x => x.Date)
                 .ThenBy(x => x.StartTime ?? TimeOnly.MaxValue)
                 .ThenBy(x => x.Title)
@@ -114,7 +118,9 @@ namespace LifeRPG.API.Endpoints
                     x.Skills
                         .OrderBy(s => s.UserSkillId)
                         .Select(s => s.UserSkillId)
-                        .ToList()))
+                        .ToList(),
+                    x.HabitId,
+                    x.Habit != null ? x.Habit.Name : null))
                 .ToListAsync(cancellationToken);
 
             return Results.Ok(tasks);
@@ -188,6 +194,17 @@ namespace LifeRPG.API.Endpoints
             {
                 return Results.BadRequest(new { error = "Некоторые навыки не найдены." });
             }
+            var habit = await GetHabitIfBelongsToUserAsync(
+                request.HabitId,
+                userId.Value,
+                dbContext,
+                cancellationToken);
+
+            if (request.HabitId.HasValue && habit is null)
+            {
+                return Results.BadRequest(new { error = "Habit was not found." });
+            }
+
             var now = DateTime.UtcNow;
 
             var task = new CalendarTask
@@ -199,6 +216,7 @@ namespace LifeRPG.API.Endpoints
                 Details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim(),
                 Difficulty = difficulty.Value,
                 IsCompleted = request.IsCompleted ?? false,
+                HabitId = habit?.Id,
                 StartTime = startTime,
                 EndTime = endTime,
                 CreatedAtUtc = now,
@@ -240,6 +258,16 @@ namespace LifeRPG.API.Endpoints
                 {
                     return Results.NotFound(new { error = "Профиль персонажа не найден." });
                 }
+
+                if (task.HabitId.HasValue)
+                {
+                    await EnsureHabitCompletedAsync(
+                        task.HabitId.Value,
+                        task.Date,
+                        userId.Value,
+                        dbContext,
+                        cancellationToken);
+                }
             }
 
             dbContext.CalendarTasks.Add(task);
@@ -261,7 +289,9 @@ namespace LifeRPG.API.Endpoints
                 task.Skills
                     .OrderBy(s => s.UserSkillId)
                     .Select(s => s.UserSkillId)
-                    .ToList());
+                    .ToList(),
+                task.HabitId,
+                habit?.Name);
 
             return Results.Ok(response);
         }
@@ -283,6 +313,7 @@ namespace LifeRPG.API.Endpoints
             var task = await dbContext.CalendarTasks
                 .Include(x => x.Attributes)
                 .Include(x => x.Skills)
+                .Include(x => x.Habit)
                 .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId.Value, cancellationToken);
 
             if (task is null)
@@ -346,14 +377,28 @@ namespace LifeRPG.API.Endpoints
                 return Results.BadRequest(new { error = "Некоторые навыки не найдены." });
             }
 
+            var habit = await GetHabitIfBelongsToUserAsync(
+                request.HabitId,
+                userId.Value,
+                dbContext,
+                cancellationToken);
+
+            if (request.HabitId.HasValue && habit is null)
+            {
+                return Results.BadRequest(new { error = "Habit was not found." });
+            }
+
             var previousDifficulty = task.Difficulty;
             var wasCompleted = task.IsCompleted;
+            var previousDate = task.Date;
+            var previousHabitId = task.HabitId;
 
             task.Title = title;
             task.Details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim();
             task.Date = date;
             task.Difficulty = difficulty.Value;
             task.IsCompleted = request.IsCompleted ?? task.IsCompleted;
+            task.HabitId = habit?.Id;
             task.StartTime = startTime;
             task.EndTime = endTime;
             task.UpdatedAtUtc = DateTime.UtcNow;
@@ -396,6 +441,21 @@ namespace LifeRPG.API.Endpoints
                 }
             }
 
+            var becameCompleted = !wasCompleted && task.IsCompleted;
+            var completedTaskChangedLinkedHabit =
+                task.IsCompleted &&
+                (previousHabitId != task.HabitId || previousDate != task.Date);
+
+            if ((becameCompleted || completedTaskChangedLinkedHabit) && task.HabitId.HasValue)
+            {
+                await EnsureHabitCompletedAsync(
+                    task.HabitId.Value,
+                    task.Date,
+                    userId.Value,
+                    dbContext,
+                    cancellationToken);
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
 
             var response = new CalendarTaskResponse(
@@ -414,7 +474,9 @@ namespace LifeRPG.API.Endpoints
                 task.Skills
                     .OrderBy(s => s.UserSkillId)
                     .Select(s => s.UserSkillId)
-                    .ToList());
+                    .ToList(),
+                task.HabitId,
+                habit?.Name);
 
             return Results.Ok(response);
         }
@@ -564,6 +626,57 @@ namespace LifeRPG.API.Endpoints
             return existing.OrderBy(x => x).ToList();
         }
 
+        private static async Task<Habit?> GetHabitIfBelongsToUserAsync(
+            Guid? habitId,
+            Guid userId,
+            AppDbContext dbContext,
+            CancellationToken cancellationToken)
+        {
+            if (!habitId.HasValue)
+            {
+                return null;
+            }
+
+            return await dbContext.Habits
+                .SingleOrDefaultAsync(
+                    x => x.Id == habitId.Value && x.UserId == userId,
+                    cancellationToken);
+        }
+
+        private static async Task EnsureHabitCompletedAsync(
+            Guid habitId,
+            DateOnly date,
+            Guid userId,
+            AppDbContext dbContext,
+            CancellationToken cancellationToken)
+        {
+            var completionExists = await dbContext.HabitCompletions
+                .AnyAsync(x => x.HabitId == habitId && x.Date == date, cancellationToken);
+
+            if (completionExists)
+            {
+                return;
+            }
+
+            dbContext.HabitCompletions.Add(new HabitCompletion
+            {
+                HabitId = habitId,
+                Date = date,
+                CompletedAtUtc = DateTime.UtcNow
+            });
+
+            var discipline = await dbContext.CharacterAttributes
+                .SingleOrDefaultAsync(
+                    x => x.Profile.UserId == userId && x.AttributeType == AttributeType.Discipline,
+                    cancellationToken);
+
+            if (discipline is not null)
+            {
+                discipline.Value += 1;
+                discipline.UpdatedAtUtc = DateTime.UtcNow;
+            }
+        }
+
         public sealed record CreateCalendarTaskRequest(
             string Title,
             string Date,
@@ -573,7 +686,8 @@ namespace LifeRPG.API.Endpoints
             string? StartTime,
             string? EndTime,
             IReadOnlyList<AttributeType>? Attributes,
-            IReadOnlyList<Guid>? SkillIds);
+            IReadOnlyList<Guid>? SkillIds,
+            Guid? HabitId);
 
         public sealed record UpdateCalendarTaskRequest(
             string Title,
@@ -584,7 +698,8 @@ namespace LifeRPG.API.Endpoints
             string? StartTime,
             string? EndTime,
             IReadOnlyList<AttributeType>? Attributes,
-            IReadOnlyList<Guid>? SkillIds);
+            IReadOnlyList<Guid>? SkillIds,
+            Guid? HabitId);
 
         public sealed record CalendarTaskResponse(
             Guid Id,
@@ -596,6 +711,8 @@ namespace LifeRPG.API.Endpoints
             string? StartTime,
             string? EndTime,
             IReadOnlyList<string> Attributes,
-            IReadOnlyList<Guid> SkillIds);
+            IReadOnlyList<Guid> SkillIds,
+            Guid? HabitId,
+            string? HabitName);
     }
 }

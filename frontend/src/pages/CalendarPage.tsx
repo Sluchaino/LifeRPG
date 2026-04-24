@@ -16,6 +16,8 @@ type CalendarTask = {
   endTime?: string | null;
   attributes: string[];
   skillIds?: string[];
+  habitId?: string | null;
+  habitName?: string | null;
 };
 
 type CalendarTaskMap = Record<string, CalendarTask[]>;
@@ -28,6 +30,15 @@ type UserSkill = {
   requiredUsesForNextLevel: number;
   streakDays: number;
   attributes: string[];
+};
+
+type HabitOption = {
+  id: string;
+  name: string;
+};
+
+type HabitsResponse = {
+  habits: HabitOption[];
 };
 
 type Difficulty = "Easy" | "Medium" | "Hard";
@@ -107,8 +118,11 @@ export default function CalendarPage() {
   const [timeError, setTimeError] = useState<string | null>(null);
   const [selectedAttributes, setSelectedAttributes] = useState<AttributeType[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedHabitId, setSelectedHabitId] = useState("");
   const [skills, setSkills] = useState<UserSkill[]>([]);
+  const [habits, setHabits] = useState<HabitOption[]>([]);
   const [skillsError, setSkillsError] = useState<string | null>(null);
+  const [habitsError, setHabitsError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [monthTasks, setMonthTasks] = useState<CalendarTaskMap>({});
@@ -233,6 +247,33 @@ export default function CalendarPage() {
     void loadSkills();
   }, [user]);
 
+  useEffect(() => {
+    if (!user) {
+      setHabits([]);
+      return;
+    }
+
+    const loadHabits = async () => {
+      setHabitsError(null);
+      try {
+        const response = await api.get<HabitsResponse>("/habits");
+        setHabits(
+          [...response.habits].sort((left, right) =>
+            left.name.localeCompare(right.name, "ru")
+          )
+        );
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setHabitsError(err.message);
+        } else {
+          setHabitsError("Не удалось загрузить привычки.");
+        }
+      }
+    };
+
+    void loadHabits();
+  }, [user]);
+
   const parseTime = (value: string): number | null => {
     const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
     if (!match) {
@@ -309,6 +350,7 @@ export default function CalendarPage() {
     setEndTime("");
     setSelectedAttributes([]);
     setSelectedSkills([]);
+    setSelectedHabitId("");
     setTimeError(null);
     setIsAddOpen(true);
   };
@@ -325,6 +367,7 @@ export default function CalendarPage() {
     setEndTime(task.endTime ?? "");
     setSelectedAttributes(normalizeAttributes(task.attributes));
     setSelectedSkills(task.skillIds ?? []);
+    setSelectedHabitId(task.habitId ?? "");
     setTimeError(null);
     setIsAddOpen(true);
   };
@@ -334,6 +377,7 @@ export default function CalendarPage() {
     setEditingTask(null);
     setTimeError(null);
     setDateError(null);
+    setSelectedHabitId("");
   };
 
   const toggleAttribute = (value: AttributeType) => {
@@ -403,7 +447,8 @@ export default function CalendarPage() {
     startTime: overrides?.startTime ?? task.startTime ?? null,
     endTime: overrides?.endTime ?? task.endTime ?? null,
     attributes: overrides?.attributes ?? task.attributes ?? [],
-    skillIds: overrides?.skillIds ?? task.skillIds ?? []
+    skillIds: overrides?.skillIds ?? task.skillIds ?? [],
+    habitId: overrides?.habitId ?? task.habitId ?? null
   });
 
   if (loading) {
@@ -532,6 +577,7 @@ export default function CalendarPage() {
                 .filter(
                   (item): item is { value: string; label: string } => Boolean(item.label)
                 );
+              const habitLabel = task.habitName?.trim();
 
               return (
                 <div
@@ -563,8 +609,11 @@ export default function CalendarPage() {
                     <div className="task-main">
                     <div className="task-title-row">
                       <div className="list-title">{task.title}</div>
-                      {(attributeTags.length > 0 || skillTags.length > 0) && (
+                      {(attributeTags.length > 0 || skillTags.length > 0 || habitLabel) && (
                         <div className="list-tags inline">
+                          {habitLabel && (
+                            <span className="pill habit-pill">{habitLabel}</span>
+                          )}
                           {attributeTags.map((tag) => (
                             <span
                               key={tag.value}
@@ -684,7 +733,8 @@ export default function CalendarPage() {
                   startTime: startTime || null,
                   endTime: endTime || null,
                   attributes: selectedAttributes,
-                  skillIds: selectedSkills
+                  skillIds: selectedSkills,
+                  habitId: selectedHabitId || null
                 };
 
                 const request = editingTask
@@ -701,6 +751,7 @@ export default function CalendarPage() {
                     setEndTime("");
                     setSelectedAttributes([]);
                     setSelectedSkills([]);
+                    setSelectedHabitId("");
                     setEditingTask(null);
                     setIsAddOpen(false);
                   })
@@ -915,6 +966,25 @@ export default function CalendarPage() {
                       </label>
                     ))}
                   </div>
+                )}
+              </div>
+              <div className="field">
+                <span>Linked habit</span>
+                {habitsError && <div className="error">{habitsError}</div>}
+                {habits.length === 0 ? (
+                  <div className="muted">No habits available for linking.</div>
+                ) : (
+                  <select
+                    value={selectedHabitId}
+                    onChange={(event) => setSelectedHabitId(event.target.value)}
+                  >
+                    <option value="">No habit</option>
+                    {habits.map((habit) => (
+                      <option key={habit.id} value={habit.id}>
+                        {habit.name}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
               <div className="button-row">
