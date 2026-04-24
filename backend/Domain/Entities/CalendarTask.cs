@@ -1,0 +1,26 @@
+using Domain.Enums;
+using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace Domain.Entities
+{
+    public sealed class CalendarTask
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public DateOnly Date { get; set; }
+        public string Title { get; set; } = default!;
+        public string? Details { get; set; }
+        public Difficulty Difficulty { get; set; }
+        public bool IsCompleted { get; set; }
+        public TimeOnly? StartTime { get; set; }
+        public TimeOnly? EndTime { get; set; }
+        public DateTime CreatedAtUtc { get; set; }
+        public DateTime UpdatedAtUtc { get; set; }
+
+        public User User { get; set; } = default!;
+        public List<CalendarTaskAttribute> Attributes { get; set; } = new();
+        public List<CalendarTaskSkill> Skills { get; set; } = new();
+    }
+}
