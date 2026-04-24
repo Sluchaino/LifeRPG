@@ -246,6 +246,8 @@ namespace LifeRPG.API.Endpoints
                 skill.CalendarTaskId = task.Id;
             }
 
+            dbContext.CalendarTasks.Add(task);
+
             if (task.IsCompleted)
             {
                 var profileUpdated = await ApplyTaskExperienceAsync(
@@ -268,9 +270,20 @@ namespace LifeRPG.API.Endpoints
                         dbContext,
                         cancellationToken);
                 }
+
+                var skillUseDeltas = new Dictionary<Guid, int>();
+                AddSkillUseDeltas(
+                    skillUseDeltas,
+                    task.Skills.Select(x => x.UserSkillId),
+                    GetSkillUsesForDifficulty(task.Difficulty));
+
+                await ApplySkillUsesDeltaAsync(
+                    userId.Value,
+                    skillUseDeltas,
+                    dbContext,
+                    cancellationToken);
             }
 
-            dbContext.CalendarTasks.Add(task);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             var response = new CalendarTaskResponse(
@@ -392,6 +405,10 @@ namespace LifeRPG.API.Endpoints
             var wasCompleted = task.IsCompleted;
             var previousDate = task.Date;
             var previousHabitId = task.HabitId;
+            var previousSkillIds = task.Skills
+                .Select(x => x.UserSkillId)
+                .Distinct()
+                .ToList();
 
             task.Title = title;
             task.Details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim();
@@ -440,6 +457,29 @@ namespace LifeRPG.API.Endpoints
                     return Results.NotFound(new { error = "Профиль персонажа не найден." });
                 }
             }
+
+            var skillUseDeltas = new Dictionary<Guid, int>();
+            if (wasCompleted)
+            {
+                AddSkillUseDeltas(
+                    skillUseDeltas,
+                    previousSkillIds,
+                    -GetSkillUsesForDifficulty(previousDifficulty));
+            }
+
+            if (task.IsCompleted)
+            {
+                AddSkillUseDeltas(
+                    skillUseDeltas,
+                    task.Skills.Select(x => x.UserSkillId),
+                    GetSkillUsesForDifficulty(task.Difficulty));
+            }
+
+            await ApplySkillUsesDeltaAsync(
+                userId.Value,
+                skillUseDeltas,
+                dbContext,
+                cancellationToken);
 
             var becameCompleted = !wasCompleted && task.IsCompleted;
             var completedTaskChangedLinkedHabit =
@@ -495,6 +535,7 @@ namespace LifeRPG.API.Endpoints
             }
 
             var task = await dbContext.CalendarTasks
+                .Include(x => x.Skills)
                 .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId.Value, cancellationToken);
 
             if (task is null)
@@ -514,6 +555,21 @@ namespace LifeRPG.API.Endpoints
                 {
                     return Results.NotFound(new { error = "Профиль персонажа не найден." });
                 }
+            }
+
+            if (task.IsCompleted)
+            {
+                var skillUseDeltas = new Dictionary<Guid, int>();
+                AddSkillUseDeltas(
+                    skillUseDeltas,
+                    task.Skills.Select(x => x.UserSkillId),
+                    -GetSkillUsesForDifficulty(task.Difficulty));
+
+                await ApplySkillUsesDeltaAsync(
+                    userId.Value,
+                    skillUseDeltas,
+                    dbContext,
+                    cancellationToken);
             }
 
             dbContext.CalendarTasks.Remove(task);
@@ -568,6 +624,106 @@ namespace LifeRPG.API.Endpoints
             }
 
             return 0;
+        }
+
+        private static int GetSkillUsesForDifficulty(Difficulty difficulty)
+        {
+            return difficulty switch
+            {
+                Difficulty.Easy => 1,
+                Difficulty.Medium => 2,
+                Difficulty.Hard => 3,
+                _ => 2
+            };
+        }
+
+        private static void AddSkillUseDeltas(
+            IDictionary<Guid, int> target,
+            IEnumerable<Guid> skillIds,
+            int deltaPerSkill)
+        {
+            if (deltaPerSkill == 0)
+            {
+                return;
+            }
+
+            foreach (var skillId in skillIds.Distinct())
+            {
+                if (target.TryGetValue(skillId, out var existing))
+                {
+                    target[skillId] = existing + deltaPerSkill;
+                    continue;
+                }
+
+                target[skillId] = deltaPerSkill;
+            }
+        }
+
+        private static async Task ApplySkillUsesDeltaAsync(
+            Guid userId,
+            IDictionary<Guid, int> skillUseDeltas,
+            AppDbContext dbContext,
+            CancellationToken cancellationToken)
+        {
+            var effectiveSkillIds = skillUseDeltas
+                .Where(x => x.Value != 0)
+                .Select(x => x.Key)
+                .Distinct()
+                .ToList();
+
+            if (effectiveSkillIds.Count == 0)
+            {
+                return;
+            }
+
+            var userSkills = await dbContext.UserSkills
+                .Where(x => x.UserId == userId && effectiveSkillIds.Contains(x.Id))
+                .ToListAsync(cancellationToken);
+
+            foreach (var userSkill in userSkills)
+            {
+                if (!skillUseDeltas.TryGetValue(userSkill.Id, out var delta) || delta == 0)
+                {
+                    continue;
+                }
+
+                ApplySkillUsesDelta(userSkill, delta);
+            }
+        }
+
+        private static void ApplySkillUsesDelta(UserSkill userSkill, int delta)
+        {
+            userSkill.Level = Math.Max(1, userSkill.Level);
+            userSkill.RequiredUsesForNextLevel = CalculateRequiredUsesForLevel(userSkill.Level);
+            userSkill.CurrentUses += delta;
+
+            while (userSkill.CurrentUses >= userSkill.RequiredUsesForNextLevel)
+            {
+                userSkill.CurrentUses -= userSkill.RequiredUsesForNextLevel;
+                userSkill.Level += 1;
+                userSkill.RequiredUsesForNextLevel = CalculateRequiredUsesForLevel(userSkill.Level);
+            }
+
+            while (userSkill.CurrentUses < 0 && userSkill.Level > 1)
+            {
+                userSkill.Level -= 1;
+                userSkill.RequiredUsesForNextLevel = CalculateRequiredUsesForLevel(userSkill.Level);
+                userSkill.CurrentUses += userSkill.RequiredUsesForNextLevel;
+            }
+
+            if (userSkill.CurrentUses < 0)
+            {
+                userSkill.CurrentUses = 0;
+            }
+
+            userSkill.RequiredUsesForNextLevel = CalculateRequiredUsesForLevel(userSkill.Level);
+            userSkill.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        private static int CalculateRequiredUsesForLevel(int level)
+        {
+            var normalizedLevel = Math.Max(1, level);
+            return 5 + normalizedLevel * 2;
         }
 
         private static IReadOnlyList<AttributeType> NormalizeAttributes(
