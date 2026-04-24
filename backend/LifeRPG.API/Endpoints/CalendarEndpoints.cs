@@ -261,6 +261,24 @@ namespace LifeRPG.API.Endpoints
                     return Results.NotFound(new { error = "Профиль персонажа не найден." });
                 }
 
+                var skillAttributesBySkillId = await LoadSkillAttributesMapAsync(
+                    userId.Value,
+                    task.Skills.Select(x => x.UserSkillId),
+                    dbContext,
+                    cancellationToken);
+
+                var attributeDeltas = BuildAttributeDeltasForTaskCompletion(
+                    task.Attributes.Select(x => x.AttributeType),
+                    task.Skills.Select(x => x.UserSkillId),
+                    task.Difficulty,
+                    skillAttributesBySkillId);
+
+                await ApplyAttributeDeltasAsync(
+                    userId.Value,
+                    attributeDeltas,
+                    dbContext,
+                    cancellationToken);
+
                 if (task.HabitId.HasValue)
                 {
                     await EnsureHabitCompletedAsync(
@@ -405,6 +423,10 @@ namespace LifeRPG.API.Endpoints
             var wasCompleted = task.IsCompleted;
             var previousDate = task.Date;
             var previousHabitId = task.HabitId;
+            var previousTaskAttributes = task.Attributes
+                .Select(x => x.AttributeType)
+                .Distinct()
+                .ToList();
             var previousSkillIds = task.Skills
                 .Select(x => x.UserSkillId)
                 .Distinct()
@@ -457,6 +479,43 @@ namespace LifeRPG.API.Endpoints
                     return Results.NotFound(new { error = "Профиль персонажа не найден." });
                 }
             }
+
+            var skillAttributesBySkillId = await LoadSkillAttributesMapAsync(
+                userId.Value,
+                previousSkillIds.Concat(task.Skills.Select(x => x.UserSkillId)),
+                dbContext,
+                cancellationToken);
+
+            var attributeDeltas = new Dictionary<AttributeType, int>();
+            if (wasCompleted)
+            {
+                AddAttributeDeltas(
+                    attributeDeltas,
+                    BuildAttributeDeltasForTaskCompletion(
+                        previousTaskAttributes,
+                        previousSkillIds,
+                        previousDifficulty,
+                        skillAttributesBySkillId),
+                    -1);
+            }
+
+            if (task.IsCompleted)
+            {
+                AddAttributeDeltas(
+                    attributeDeltas,
+                    BuildAttributeDeltasForTaskCompletion(
+                        task.Attributes.Select(x => x.AttributeType),
+                        task.Skills.Select(x => x.UserSkillId),
+                        task.Difficulty,
+                        skillAttributesBySkillId),
+                    1);
+            }
+
+            await ApplyAttributeDeltasAsync(
+                userId.Value,
+                attributeDeltas,
+                dbContext,
+                cancellationToken);
 
             var skillUseDeltas = new Dictionary<Guid, int>();
             if (wasCompleted)
@@ -535,6 +594,7 @@ namespace LifeRPG.API.Endpoints
             }
 
             var task = await dbContext.CalendarTasks
+                .Include(x => x.Attributes)
                 .Include(x => x.Skills)
                 .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId.Value, cancellationToken);
 
@@ -559,6 +619,24 @@ namespace LifeRPG.API.Endpoints
 
             if (task.IsCompleted)
             {
+                var skillAttributesBySkillId = await LoadSkillAttributesMapAsync(
+                    userId.Value,
+                    task.Skills.Select(x => x.UserSkillId),
+                    dbContext,
+                    cancellationToken);
+
+                var attributeDeltas = BuildAttributeDeltasForTaskCompletion(
+                    task.Attributes.Select(x => x.AttributeType),
+                    task.Skills.Select(x => x.UserSkillId),
+                    task.Difficulty,
+                    skillAttributesBySkillId);
+
+                await ApplyAttributeDeltasAsync(
+                    userId.Value,
+                    attributeDeltas.ToDictionary(x => x.Key, x => -x.Value),
+                    dbContext,
+                    cancellationToken);
+
                 var skillUseDeltas = new Dictionary<Guid, int>();
                 AddSkillUseDeltas(
                     skillUseDeltas,
@@ -624,6 +702,163 @@ namespace LifeRPG.API.Endpoints
             }
 
             return 0;
+        }
+
+        private static int GetTaskAttributeGainForDifficulty(Difficulty difficulty)
+        {
+            return difficulty switch
+            {
+                Difficulty.Easy => 1,
+                Difficulty.Medium => 2,
+                Difficulty.Hard => 3,
+                _ => 2
+            };
+        }
+
+        private static int GetSkillAttributeGainForDifficulty(Difficulty difficulty)
+        {
+            return difficulty switch
+            {
+                Difficulty.Easy => 1,
+                Difficulty.Medium => 1,
+                Difficulty.Hard => 2,
+                _ => 1
+            };
+        }
+
+        private static Dictionary<AttributeType, int> BuildAttributeDeltasForTaskCompletion(
+            IEnumerable<AttributeType> taskAttributes,
+            IEnumerable<Guid> skillIds,
+            Difficulty difficulty,
+            IReadOnlyDictionary<Guid, IReadOnlyList<AttributeType>> skillAttributesBySkillId)
+        {
+            var deltas = new Dictionary<AttributeType, int>();
+
+            var taskAttributeGain = GetTaskAttributeGainForDifficulty(difficulty);
+            foreach (var attributeType in taskAttributes.Distinct())
+            {
+                AddAttributeDelta(deltas, attributeType, taskAttributeGain);
+            }
+
+            var skillAttributeGain = GetSkillAttributeGainForDifficulty(difficulty);
+            foreach (var skillId in skillIds.Distinct())
+            {
+                if (!skillAttributesBySkillId.TryGetValue(skillId, out var relatedAttributes))
+                {
+                    continue;
+                }
+
+                foreach (var attributeType in relatedAttributes.Distinct())
+                {
+                    AddAttributeDelta(deltas, attributeType, skillAttributeGain);
+                }
+            }
+
+            return deltas;
+        }
+
+        private static void AddAttributeDeltas(
+            IDictionary<AttributeType, int> target,
+            IReadOnlyDictionary<AttributeType, int> source,
+            int sign)
+        {
+            if (sign == 0 || source.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var (attributeType, delta) in source)
+            {
+                AddAttributeDelta(target, attributeType, delta * sign);
+            }
+        }
+
+        private static void AddAttributeDelta(
+            IDictionary<AttributeType, int> target,
+            AttributeType attributeType,
+            int delta)
+        {
+            if (delta == 0)
+            {
+                return;
+            }
+
+            if (target.TryGetValue(attributeType, out var existing))
+            {
+                target[attributeType] = existing + delta;
+                return;
+            }
+
+            target[attributeType] = delta;
+        }
+
+        private static async Task<Dictionary<Guid, IReadOnlyList<AttributeType>>> LoadSkillAttributesMapAsync(
+            Guid userId,
+            IEnumerable<Guid> skillIds,
+            AppDbContext dbContext,
+            CancellationToken cancellationToken)
+        {
+            var distinctSkillIds = skillIds
+                .Distinct()
+                .ToList();
+
+            if (distinctSkillIds.Count == 0)
+            {
+                return new Dictionary<Guid, IReadOnlyList<AttributeType>>();
+            }
+
+            var rows = await dbContext.UserSkillAttributes
+                .AsNoTracking()
+                .Where(x =>
+                    distinctSkillIds.Contains(x.UserSkillId) &&
+                    x.UserSkill.UserId == userId)
+                .Select(x => new { x.UserSkillId, x.AttributeType })
+                .ToListAsync(cancellationToken);
+
+            return rows
+                .GroupBy(x => x.UserSkillId)
+                .ToDictionary(
+                    x => x.Key,
+                    x => (IReadOnlyList<AttributeType>)x
+                        .Select(v => v.AttributeType)
+                        .Distinct()
+                        .ToList());
+        }
+
+        private static async Task ApplyAttributeDeltasAsync(
+            Guid userId,
+            IReadOnlyDictionary<AttributeType, int> attributeDeltas,
+            AppDbContext dbContext,
+            CancellationToken cancellationToken)
+        {
+            var effectiveAttributeTypes = attributeDeltas
+                .Where(x => x.Value != 0)
+                .Select(x => x.Key)
+                .Distinct()
+                .ToList();
+
+            if (effectiveAttributeTypes.Count == 0)
+            {
+                return;
+            }
+
+            var attributes = await dbContext.CharacterAttributes
+                .Where(x =>
+                    x.Profile.UserId == userId &&
+                    effectiveAttributeTypes.Contains(x.AttributeType))
+                .ToListAsync(cancellationToken);
+
+            var now = DateTime.UtcNow;
+            foreach (var attribute in attributes)
+            {
+                if (!attributeDeltas.TryGetValue(attribute.AttributeType, out var delta) || delta == 0)
+                {
+                    continue;
+                }
+
+                attribute.Value = Math.Max(0, attribute.Value + delta);
+                attribute.UpdatedAtUtc = now;
+            }
         }
 
         private static int GetSkillUsesForDifficulty(Difficulty difficulty)
