@@ -202,7 +202,7 @@ namespace LifeRPG.API.Endpoints
 
             if (request.HabitId.HasValue && habit is null)
             {
-                return Results.BadRequest(new { error = "Habit was not found." });
+                return Results.BadRequest(new { error = "\u041f\u0440\u0438\u0432\u044b\u0447\u043a\u0430 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u0430." });
             }
 
             var now = DateTime.UtcNow;
@@ -385,7 +385,7 @@ namespace LifeRPG.API.Endpoints
 
             if (request.HabitId.HasValue && habit is null)
             {
-                return Results.BadRequest(new { error = "Habit was not found." });
+                return Results.BadRequest(new { error = "\u041f\u0440\u0438\u0432\u044b\u0447\u043a\u0430 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u0430." });
             }
 
             var previousDifficulty = task.Difficulty;

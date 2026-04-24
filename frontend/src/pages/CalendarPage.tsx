@@ -969,16 +969,20 @@ export default function CalendarPage() {
                 )}
               </div>
               <div className="field">
-                <span>Linked habit</span>
+                <span>{"\u0421\u0432\u044f\u0437\u0430\u043d\u043d\u0430\u044f \u043f\u0440\u0438\u0432\u044b\u0447\u043a\u0430"}</span>
                 {habitsError && <div className="error">{habitsError}</div>}
                 {habits.length === 0 ? (
-                  <div className="muted">No habits available for linking.</div>
+                  <div className="muted">
+                    {"\u041f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043f\u0440\u0438\u0432\u044b\u0447\u0435\u043a \u0434\u043b\u044f \u0441\u0432\u044f\u0437\u0438."}
+                  </div>
                 ) : (
                   <select
                     value={selectedHabitId}
                     onChange={(event) => setSelectedHabitId(event.target.value)}
                   >
-                    <option value="">No habit</option>
+                    <option value="">
+                      {"\u0411\u0435\u0437 \u043f\u0440\u0438\u0432\u044b\u0447\u043a\u0438"}
+                    </option>
                     {habits.map((habit) => (
                       <option key={habit.id} value={habit.id}>
                         {habit.name}
