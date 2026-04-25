@@ -1,4 +1,5 @@
 using LifeRPG.API.Endpoints;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -11,6 +12,14 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
+
+var dataProtectionKeysPath =
+    builder.Configuration["DataProtection:KeysPath"] ??
+    Path.Combine(builder.Environment.ContentRootPath, ".keys");
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services
+    .AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {

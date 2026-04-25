@@ -922,7 +922,7 @@ namespace LifeRPG.API.Endpoints
             IEnumerable<AttributeType> taskAttributes,
             IEnumerable<Guid> skillIds,
             Difficulty difficulty,
-            IReadOnlyDictionary<Guid, IReadOnlyList<AttributeType>> skillAttributesBySkillId)
+            IReadOnlyDictionary<Guid, IReadOnlyList<SkillAttributeShare>> skillAttributesBySkillId)
         {
             var deltas = new Dictionary<AttributeType, int>();
 
@@ -940,13 +940,89 @@ namespace LifeRPG.API.Endpoints
                     continue;
                 }
 
-                foreach (var attributeType in relatedAttributes.Distinct())
+                var distributedDeltas = DistributeSkillAttributeGain(
+                    relatedAttributes,
+                    skillAttributeGain);
+
+                foreach (var (attributeType, delta) in distributedDeltas)
                 {
-                    AddAttributeDelta(deltas, attributeType, skillAttributeGain);
+                    AddAttributeDelta(deltas, attributeType, delta);
                 }
             }
 
             return deltas;
+        }
+
+        private static Dictionary<AttributeType, int> DistributeSkillAttributeGain(
+            IReadOnlyList<SkillAttributeShare> attributeShares,
+            int totalGain)
+        {
+            var result = new Dictionary<AttributeType, int>();
+            if (totalGain <= 0 || attributeShares.Count == 0)
+            {
+                return result;
+            }
+
+            var normalizedShares = attributeShares
+                .GroupBy(x => x.AttributeType)
+                .Select(group => new SkillAttributeShare(
+                    group.Key,
+                    group.Sum(x => Math.Max(0, x.SharePercent))))
+                .Where(x => x.SharePercent > 0)
+                .ToList();
+
+            if (normalizedShares.Count == 0)
+            {
+                return result;
+            }
+
+            var totalPercent = normalizedShares.Sum(x => x.SharePercent);
+            if (totalPercent <= 0)
+            {
+                return result;
+            }
+
+            var allocations = normalizedShares
+                .Select(x =>
+                {
+                    var weighted = totalGain * (double)x.SharePercent / totalPercent;
+                    var baseValue = (int)Math.Floor(weighted);
+                    return new
+                    {
+                        x.AttributeType,
+                        BaseValue = baseValue,
+                        Fraction = weighted - baseValue,
+                        Percent = x.SharePercent
+                    };
+                })
+                .ToList();
+
+            var allocated = allocations.Sum(x => x.BaseValue);
+            var remaining = totalGain - allocated;
+
+            foreach (var allocation in allocations)
+            {
+                if (allocation.BaseValue > 0)
+                {
+                    AddAttributeDelta(result, allocation.AttributeType, allocation.BaseValue);
+                }
+            }
+
+            if (remaining <= 0)
+            {
+                return result;
+            }
+
+            foreach (var allocation in allocations
+                .OrderByDescending(x => x.Fraction)
+                .ThenByDescending(x => x.Percent)
+                .ThenBy(x => x.AttributeType)
+                .Take(remaining))
+            {
+                AddAttributeDelta(result, allocation.AttributeType, 1);
+            }
+
+            return result;
         }
 
         private static void AddAttributeDeltas(
@@ -984,7 +1060,7 @@ namespace LifeRPG.API.Endpoints
             target[attributeType] = delta;
         }
 
-        private static async Task<Dictionary<Guid, IReadOnlyList<AttributeType>>> LoadSkillAttributesMapAsync(
+        private static async Task<Dictionary<Guid, IReadOnlyList<SkillAttributeShare>>> LoadSkillAttributesMapAsync(
             Guid userId,
             IEnumerable<Guid> skillIds,
             AppDbContext dbContext,
@@ -996,7 +1072,7 @@ namespace LifeRPG.API.Endpoints
 
             if (distinctSkillIds.Count == 0)
             {
-                return new Dictionary<Guid, IReadOnlyList<AttributeType>>();
+                return new Dictionary<Guid, IReadOnlyList<SkillAttributeShare>>();
             }
 
             var rows = await dbContext.UserSkillAttributes
@@ -1004,16 +1080,24 @@ namespace LifeRPG.API.Endpoints
                 .Where(x =>
                     distinctSkillIds.Contains(x.UserSkillId) &&
                     x.UserSkill.UserId == userId)
-                .Select(x => new { x.UserSkillId, x.AttributeType })
+                .Select(x => new
+                {
+                    x.UserSkillId,
+                    x.AttributeType,
+                    x.SharePercent
+                })
                 .ToListAsync(cancellationToken);
 
             return rows
                 .GroupBy(x => x.UserSkillId)
                 .ToDictionary(
                     x => x.Key,
-                    x => (IReadOnlyList<AttributeType>)x
-                        .Select(v => v.AttributeType)
-                        .Distinct()
+                    x => (IReadOnlyList<SkillAttributeShare>)x
+                        .GroupBy(v => v.AttributeType)
+                        .Select(group => new SkillAttributeShare(
+                            group.Key,
+                            group.Sum(item => item.SharePercent)))
+                        .OrderBy(v => v.AttributeType)
                         .ToList());
         }
 
@@ -1325,6 +1409,10 @@ namespace LifeRPG.API.Endpoints
                 discipline.UpdatedAtUtc = DateTime.UtcNow;
             }
         }
+
+        private sealed record SkillAttributeShare(
+            AttributeType AttributeType,
+            int SharePercent);
 
         public sealed record CreateCalendarTaskRequest(
             string Title,

@@ -326,11 +326,15 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int>("SharePercent")
+                        .HasColumnType("integer");
+
                     b.HasKey("UserSkillId", "AttributeType");
 
                     b.ToTable("user_skill_attributes", null, t =>
                         {
                             t.HasCheckConstraint("ck_user_skill_attributes_no_discipline", "\"AttributeType\" <> 'Discipline'");
+                            t.HasCheckConstraint("ck_user_skill_attributes_share_percent_range", "\"SharePercent\" > 0 AND \"SharePercent\" <= 100");
                         });
                 });
 

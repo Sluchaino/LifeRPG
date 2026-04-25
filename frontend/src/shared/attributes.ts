@@ -50,7 +50,7 @@ export const ATTRIBUTE_DESCRIPTIONS: Record<AttributeType, string> = {
     "Самоконтроль, сила воли, организованность, способность следовать расписанию, умение откладывать вознаграждение, упорство в достижении целей."
 };
 
-const ATTRIBUTE_SOFT_COLORS: Record<AttributeType, string> = {
+export const ATTRIBUTE_SOFT_COLORS: Record<AttributeType, string> = {
   Strength: "rgba(255, 107, 107, 0.18)",
   Endurance: "rgba(255, 179, 71, 0.18)",
   Health: "rgba(110, 231, 183, 0.18)",
@@ -60,6 +60,25 @@ const ATTRIBUTE_SOFT_COLORS: Record<AttributeType, string> = {
   Charisma: "rgba(244, 114, 182, 0.18)",
   Discipline: "rgba(250, 204, 21, 0.18)"
 };
+
+export const ATTRIBUTE_STRONG_COLORS: Record<AttributeType, string> = {
+  Strength: "rgb(255, 107, 107)",
+  Endurance: "rgb(255, 179, 71)",
+  Health: "rgb(110, 231, 183)",
+  Intelligence: "rgb(125, 211, 252)",
+  Wisdom: "rgb(94, 234, 212)",
+  Agility: "rgb(163, 230, 53)",
+  Charisma: "rgb(244, 114, 182)",
+  Discipline: "rgb(250, 204, 21)"
+};
+
+export function getAttributeSoftColor(attribute: AttributeType): string {
+  return ATTRIBUTE_SOFT_COLORS[attribute];
+}
+
+export function getAttributeStrongColor(attribute: AttributeType): string {
+  return ATTRIBUTE_STRONG_COLORS[attribute];
+}
 
 export function buildAttributeGradient(attributes: string[]): string | null {
   const colors = attributes

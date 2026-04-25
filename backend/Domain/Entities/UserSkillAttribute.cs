@@ -9,6 +9,7 @@ namespace Domain.Entities
     {
         public Guid UserSkillId { get; set; }
         public AttributeType AttributeType { get; set; }
+        public int SharePercent { get; set; }
 
         public UserSkill UserSkill { get; set; } = default!;
     }

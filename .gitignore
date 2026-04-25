@@ -422,3 +422,4 @@ dist/
 .idea/
 
 .env
+backend/LifeRPG.API/.keys/

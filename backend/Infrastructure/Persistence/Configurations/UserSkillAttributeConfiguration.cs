@@ -13,6 +13,9 @@ namespace Infrastructure.Persistence.Configurations
                 tableBuilder.HasCheckConstraint(
                     "ck_user_skill_attributes_no_discipline",
                     "\"AttributeType\" <> 'Discipline'");
+                tableBuilder.HasCheckConstraint(
+                    "ck_user_skill_attributes_share_percent_range",
+                    "\"SharePercent\" > 0 AND \"SharePercent\" <= 100");
             });
 
             builder.HasKey(x => new { x.UserSkillId, x.AttributeType });
@@ -20,6 +23,9 @@ namespace Infrastructure.Persistence.Configurations
             builder.Property(x => x.AttributeType)
                 .HasConversion<string>()
                 .HasMaxLength(50)
+                .IsRequired();
+
+            builder.Property(x => x.SharePercent)
                 .IsRequired();
         }
     }

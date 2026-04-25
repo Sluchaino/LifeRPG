@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../shared/api";
 import { useAuth } from "../shared/auth";
@@ -9,6 +9,12 @@ import {
   AttributeType,
   buildAttributeGradient
 } from "../shared/attributes";
+import { SkillAttributeDistributionSlider } from "../shared/SkillAttributeDistributionSlider";
+import {
+  SkillAttributeShare,
+  hasInvalidSkillAttributeShares,
+  rebalanceSkillAttributeShares
+} from "../shared/skillAttributeShares";
 
 type ProfileResponse = {
   userId: string;
@@ -28,6 +34,10 @@ type SkillResponse = {
   currentUses: number;
   requiredUsesForNextLevel: number;
   attributes: string[];
+  attributeShares: {
+    attributeType: string;
+    percent: number;
+  }[];
 };
 
 export default function ProfilePage() {
@@ -36,11 +46,21 @@ export default function ProfilePage() {
   const [skills, setSkills] = useState<SkillResponse[]>([]);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<AttributeType[]>([]);
+  const [selectedShares, setSelectedShares] = useState<SkillAttributeShare[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const canSubmit = useMemo(() => name.trim().length >= 2 && !busy, [name, busy]);
+  const hasInvalidShareState = useMemo(
+    () => hasInvalidSkillAttributeShares(selectedShares),
+    [selectedShares]
+  );
+
+  const canSubmit = useMemo(
+    () => name.trim().length >= 2 && !busy && !hasInvalidShareState,
+    [name, busy, hasInvalidShareState]
+  );
+
   const experiencePercent = profile
     ? Math.min(
         100,
@@ -78,12 +98,19 @@ export default function ProfilePage() {
     void load();
   }, [user]);
 
-  const toggleAttribute = (value: AttributeType) => {
-    setSelected((current) =>
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value]
+  const setSelectedWithShares = (nextSelected: AttributeType[]) => {
+    setSelected(nextSelected);
+    setSelectedShares((current) =>
+      rebalanceSkillAttributeShares(nextSelected, current)
     );
+  };
+
+  const toggleAttribute = (value: AttributeType) => {
+    const nextSelected = selected.includes(value)
+      ? selected.filter((item) => item !== value)
+      : [...selected, value];
+
+    setSelectedWithShares(nextSelected);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -98,13 +125,18 @@ export default function ProfilePage() {
     try {
       const response = await api.post<SkillResponse>("/skills", {
         name,
-        attributes: selected
+        attributes: selected,
+        attributeShares: selectedShares.map((share) => ({
+          attributeType: share.attributeType,
+          percent: share.percent
+        }))
       });
       setSkills((current) =>
         [...current, response].sort((a, b) => a.name.localeCompare(b.name))
       );
       setName("");
       setSelected([]);
+      setSelectedShares([]);
       setIsAddOpen(false);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -141,10 +173,7 @@ export default function ProfilePage() {
             <span className="experience-total">Всего опыта: {profile.totalExperience}</span>
           </div>
           <div className="experience-bar">
-            <div
-              className="experience-fill"
-              style={{ width: `${experiencePercent}%` }}
-            />
+            <div className="experience-fill" style={{ width: `${experiencePercent}%` }} />
           </div>
           <div className="experience-meta">
             {profile.currentLevelExperience}/{profile.experienceToNextLevel} до следующего
@@ -164,8 +193,7 @@ export default function ProfilePage() {
                   className="attribute-row"
                   data-attribute={attribute.type}
                   title={
-                    ATTRIBUTE_DESCRIPTIONS[attribute.type as AttributeType] ??
-                    attribute.type
+                    ATTRIBUTE_DESCRIPTIONS[attribute.type as AttributeType] ?? attribute.type
                   }
                 >
                   <span className="attribute-name">
@@ -199,16 +227,16 @@ export default function ProfilePage() {
             <div className="muted">Навыков нет. Добавьте первый.</div>
           ) : (
             <div className="list">
-            {skills.map((skill) => (
-              <div
-                key={skill.userSkillId}
-                className="list-item skill-card"
-                style={{
-                  backgroundImage: buildAttributeGradient(skill.attributes) ?? undefined
-                }}
-              >
-                <div>
-                  <div className="list-title">{skill.name}</div>
+              {skills.map((skill) => (
+                <div
+                  key={skill.userSkillId}
+                  className="list-item skill-card"
+                  style={{
+                    backgroundImage: buildAttributeGradient(skill.attributes) ?? undefined
+                  }}
+                >
+                  <div>
+                    <div className="list-title">{skill.name}</div>
                     <div className="list-meta">
                       Уровень {skill.level} · Использования {skill.currentUses}/
                       {skill.requiredUsesForNextLevel}
@@ -217,15 +245,17 @@ export default function ProfilePage() {
                       {skill.attributes.length === 0 ? (
                         <span className="pill muted">Без характеристик</span>
                       ) : (
-                        skill.attributes.map((attr) => (
-                          <span
-                            key={attr}
-                            className="pill attribute-pill"
-                            data-attribute={attr}
-                          >
-                            {ATTRIBUTE_LABELS[attr] ?? attr}
-                          </span>
-                        ))
+                        skill.attributes.map((attr) => {
+                          const share = skill.attributeShares.find(
+                            (item) => item.attributeType === attr
+                          );
+                          return (
+                            <span key={attr} className="pill attribute-pill" data-attribute={attr}>
+                              {ATTRIBUTE_LABELS[attr] ?? attr}
+                              {share ? ` ${share.percent}%` : ""}
+                            </span>
+                          );
+                        })
                       )}
                     </div>
                   </div>
@@ -279,6 +309,24 @@ export default function ProfilePage() {
                   ))}
                 </div>
               </div>
+
+              {selectedShares.length > 1 && (
+                <div className="field">
+                  <span>Распределение вклада по характеристикам</span>
+                  <SkillAttributeDistributionSlider
+                    shares={selectedShares}
+                    onChange={setSelectedShares}
+                  />
+                  <span className="muted">
+                    Чем больше процент, тем больше очков характеристика получит при использовании
+                    навыка.
+                  </span>
+                </div>
+              )}
+
+              {hasInvalidShareState && (
+                <div className="error">Сумма процентов распределения должна быть ровно 100%.</div>
+              )}
               {error && <div className="error">{error}</div>}
               <div className="button-row">
                 <button className="primary" type="submit" disabled={!canSubmit}>

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 
 namespace LifeRPG.API.Endpoints
 {
@@ -43,6 +43,13 @@ namespace LifeRPG.API.Endpoints
                         .Where(a => a.AttributeType != AttributeType.Discipline)
                         .OrderBy(a => a.AttributeType)
                         .Select(a => a.AttributeType.ToString())
+                        .ToList(),
+                    x.Attributes
+                        .Where(a => a.AttributeType != AttributeType.Discipline)
+                        .OrderBy(a => a.AttributeType)
+                        .Select(a => new SkillAttributeShareResponse(
+                            a.AttributeType.ToString(),
+                            a.SharePercent))
                         .ToList()))
                 .ToListAsync(cancellationToken);
 
@@ -80,14 +87,20 @@ namespace LifeRPG.API.Endpoints
                 return Results.Conflict(new { error = "Навык с таким названием уже существует." });
             }
 
-            var now = DateTime.UtcNow;
-            var attributes = NormalizeAttributes(request.Attributes);
+            var normalizationResult = NormalizeAttributeShares(request.AttributeShares, request.Attributes);
+            if (!normalizationResult.IsValid)
+            {
+                return Results.BadRequest(new { error = normalizationResult.ErrorMessage });
+            }
 
-            if (attributes.Contains(AttributeType.Discipline))
+            var attributeShares = normalizationResult.Value!;
+
+            if (attributeShares.Any(x => x.AttributeType == AttributeType.Discipline))
             {
                 return Results.BadRequest(new { error = "Дисциплину больше нельзя связывать с навыком." });
             }
 
+            var now = DateTime.UtcNow;
             var userSkill = new UserSkill
             {
                 Id = Guid.NewGuid(),
@@ -99,11 +112,12 @@ namespace LifeRPG.API.Endpoints
                 RequiredUsesForNextLevel = 7,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now,
-                Attributes = attributes
-                    .Select(attributeType => new UserSkillAttribute
+                Attributes = attributeShares
+                    .Select(attributeShare => new UserSkillAttribute
                     {
                         UserSkillId = Guid.Empty,
-                        AttributeType = attributeType
+                        AttributeType = attributeShare.AttributeType,
+                        SharePercent = attributeShare.SharePercent
                     })
                     .ToList()
             };
@@ -116,19 +130,7 @@ namespace LifeRPG.API.Endpoints
             dbContext.UserSkills.Add(userSkill);
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            var response = new SkillResponse(
-                userSkill.Id,
-                userSkill.Name,
-                userSkill.Level,
-                userSkill.CurrentUses,
-                userSkill.RequiredUsesForNextLevel,
-                userSkill.Attributes
-                    .Where(a => a.AttributeType != AttributeType.Discipline)
-                    .OrderBy(a => a.AttributeType)
-                    .Select(a => a.AttributeType.ToString())
-                    .ToList());
-
-            return Results.Ok(response);
+            return Results.Ok(ToSkillResponse(userSkill));
         }
 
         private static async Task<IResult> UpdateSkillAsync(
@@ -175,9 +177,15 @@ namespace LifeRPG.API.Endpoints
                 return Results.Conflict(new { error = "Навык с таким названием уже существует." });
             }
 
-            var attributes = NormalizeAttributes(request.Attributes);
+            var normalizationResult = NormalizeAttributeShares(request.AttributeShares, request.Attributes);
+            if (!normalizationResult.IsValid)
+            {
+                return Results.BadRequest(new { error = normalizationResult.ErrorMessage });
+            }
 
-            if (attributes.Contains(AttributeType.Discipline))
+            var attributeShares = normalizationResult.Value!;
+
+            if (attributeShares.Any(x => x.AttributeType == AttributeType.Discipline))
             {
                 return Results.BadRequest(new { error = "Дисциплину больше нельзя связывать с навыком." });
             }
@@ -187,30 +195,19 @@ namespace LifeRPG.API.Endpoints
             userSkill.UpdatedAtUtc = DateTime.UtcNow;
 
             userSkill.Attributes.Clear();
-            foreach (var attributeType in attributes)
+            foreach (var attributeShare in attributeShares)
             {
                 userSkill.Attributes.Add(new UserSkillAttribute
                 {
                     UserSkillId = userSkill.Id,
-                    AttributeType = attributeType
+                    AttributeType = attributeShare.AttributeType,
+                    SharePercent = attributeShare.SharePercent
                 });
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            var response = new SkillResponse(
-                userSkill.Id,
-                userSkill.Name,
-                userSkill.Level,
-                userSkill.CurrentUses,
-                userSkill.RequiredUsesForNextLevel,
-                userSkill.Attributes
-                    .Where(a => a.AttributeType != AttributeType.Discipline)
-                    .OrderBy(a => a.AttributeType)
-                    .Select(a => a.AttributeType.ToString())
-                    .ToList());
-
-            return Results.Ok(response);
+            return Results.Ok(ToSkillResponse(userSkill));
         }
 
         private static async Task<IResult> DeleteSkillAsync(
@@ -248,27 +245,98 @@ namespace LifeRPG.API.Endpoints
             return name.Trim().ToLowerInvariant();
         }
 
-        private static IReadOnlyList<AttributeType> NormalizeAttributes(
+        private static SkillResponse ToSkillResponse(UserSkill userSkill)
+        {
+            return new SkillResponse(
+                userSkill.Id,
+                userSkill.Name,
+                userSkill.Level,
+                userSkill.CurrentUses,
+                userSkill.RequiredUsesForNextLevel,
+                userSkill.Attributes
+                    .Where(a => a.AttributeType != AttributeType.Discipline)
+                    .OrderBy(a => a.AttributeType)
+                    .Select(a => a.AttributeType.ToString())
+                    .ToList(),
+                userSkill.Attributes
+                    .Where(a => a.AttributeType != AttributeType.Discipline)
+                    .OrderBy(a => a.AttributeType)
+                    .Select(a => new SkillAttributeShareResponse(
+                        a.AttributeType.ToString(),
+                        a.SharePercent))
+                    .ToList());
+        }
+
+        private static AttributeSharesNormalizationResult NormalizeAttributeShares(
+            IReadOnlyList<SkillAttributeShareRequest>? attributeShares,
             IReadOnlyList<AttributeType>? attributes)
         {
-            if (attributes is null || attributes.Count == 0)
+            if (attributeShares is not null && attributeShares.Count > 0)
             {
-                return Array.Empty<AttributeType>();
+                var normalizedShares = attributeShares
+                    .Select(x => new NormalizedAttributeShare(x.AttributeType, x.Percent))
+                    .OrderBy(x => x.AttributeType)
+                    .ToList();
+
+                if (normalizedShares.Any(x => x.SharePercent <= 0 || x.SharePercent > 100))
+                {
+                    return AttributeSharesNormalizationResult.Invalid("Процент распределения должен быть от 1 до 100.");
+                }
+
+                var hasDuplicates = normalizedShares
+                    .GroupBy(x => x.AttributeType)
+                    .Any(x => x.Count() > 1);
+
+                if (hasDuplicates)
+                {
+                    return AttributeSharesNormalizationResult.Invalid("Характеристики в распределении не должны повторяться.");
+                }
+
+                var totalPercent = normalizedShares.Sum(x => x.SharePercent);
+                if (totalPercent != 100)
+                {
+                    return AttributeSharesNormalizationResult.Invalid("Сумма процентов распределения должна быть равна 100.");
+                }
+
+                return AttributeSharesNormalizationResult.Valid(normalizedShares);
             }
 
-            return attributes
+            if (attributes is null || attributes.Count == 0)
+            {
+                return AttributeSharesNormalizationResult.Valid(Array.Empty<NormalizedAttributeShare>());
+            }
+
+            var normalizedAttributes = attributes
                 .Distinct()
                 .OrderBy(x => x)
                 .ToList();
+
+            var baseShare = 100 / normalizedAttributes.Count;
+            var remainder = 100 - baseShare * normalizedAttributes.Count;
+            var result = new List<NormalizedAttributeShare>(normalizedAttributes.Count);
+
+            for (var index = 0; index < normalizedAttributes.Count; index++)
+            {
+                var share = baseShare + (index < remainder ? 1 : 0);
+                result.Add(new NormalizedAttributeShare(normalizedAttributes[index], share));
+            }
+
+            return AttributeSharesNormalizationResult.Valid(result);
         }
 
         public sealed record CreateUserSkillRequest(
             string Name,
-            IReadOnlyList<AttributeType>? Attributes);
+            IReadOnlyList<AttributeType>? Attributes,
+            IReadOnlyList<SkillAttributeShareRequest>? AttributeShares);
 
         public sealed record UpdateUserSkillRequest(
             string Name,
-            IReadOnlyList<AttributeType>? Attributes);
+            IReadOnlyList<AttributeType>? Attributes,
+            IReadOnlyList<SkillAttributeShareRequest>? AttributeShares);
+
+        public sealed record SkillAttributeShareRequest(
+            AttributeType AttributeType,
+            int Percent);
 
         public sealed record SkillResponse(
             Guid UserSkillId,
@@ -276,6 +344,28 @@ namespace LifeRPG.API.Endpoints
             int Level,
             int CurrentUses,
             int RequiredUsesForNextLevel,
-            IReadOnlyList<string> Attributes);
+            IReadOnlyList<string> Attributes,
+            IReadOnlyList<SkillAttributeShareResponse> AttributeShares);
+
+        public sealed record SkillAttributeShareResponse(
+            string AttributeType,
+            int Percent);
+
+        private sealed record NormalizedAttributeShare(
+            AttributeType AttributeType,
+            int SharePercent);
+
+        private sealed record AttributeSharesNormalizationResult(
+            bool IsValid,
+            string? ErrorMessage,
+            IReadOnlyList<NormalizedAttributeShare>? Value)
+        {
+            public static AttributeSharesNormalizationResult Valid(
+                IReadOnlyList<NormalizedAttributeShare> value) =>
+                new(true, null, value);
+
+            public static AttributeSharesNormalizationResult Invalid(string errorMessage) =>
+                new(false, errorMessage, null);
+        }
     }
 }

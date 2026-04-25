@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../shared/api";
 import { useAuth } from "../shared/auth";
 import {
@@ -8,6 +8,12 @@ import {
   AttributeType,
   buildAttributeGradient
 } from "../shared/attributes";
+import { SkillAttributeDistributionSlider } from "../shared/SkillAttributeDistributionSlider";
+import {
+  SkillAttributeShare,
+  hasInvalidSkillAttributeShares,
+  rebalanceSkillAttributeShares
+} from "../shared/skillAttributeShares";
 
 type SkillResponse = {
   userSkillId: string;
@@ -16,6 +22,10 @@ type SkillResponse = {
   currentUses: number;
   requiredUsesForNextLevel: number;
   attributes: string[];
+  attributeShares: {
+    attributeType: string;
+    percent: number;
+  }[];
 };
 
 export default function SkillsPage() {
@@ -23,16 +33,31 @@ export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillResponse[]>([]);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<AttributeType[]>([]);
+  const [selectedShares, setSelectedShares] = useState<SkillAttributeShare[]>([]);
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [editingAttributes, setEditingAttributes] = useState<AttributeType[]>([]);
+  const [editingShares, setEditingShares] = useState<SkillAttributeShare[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const canSubmit = useMemo(() => name.trim().length >= 2 && !busy, [name, busy]);
+  const hasInvalidCreateShareState = useMemo(
+    () => hasInvalidSkillAttributeShares(selectedShares),
+    [selectedShares]
+  );
+  const hasInvalidEditShareState = useMemo(
+    () => hasInvalidSkillAttributeShares(editingShares),
+    [editingShares]
+  );
+
+  const canSubmit = useMemo(
+    () => name.trim().length >= 2 && !busy && !hasInvalidCreateShareState,
+    [name, busy, hasInvalidCreateShareState]
+  );
+
   const canEditSubmit = useMemo(
-    () => editingName.trim().length >= 2 && !busy,
-    [editingName, busy]
+    () => editingName.trim().length >= 2 && !busy && !hasInvalidEditShareState,
+    [editingName, busy, hasInvalidEditShareState]
   );
 
   useEffect(() => {
@@ -57,20 +82,30 @@ export default function SkillsPage() {
     void load();
   }, [user]);
 
+  const setSelectedWithShares = (nextSelected: AttributeType[]) => {
+    setSelected(nextSelected);
+    setSelectedShares((current) => rebalanceSkillAttributeShares(nextSelected, current));
+  };
+
+  const setEditingWithShares = (nextSelected: AttributeType[]) => {
+    setEditingAttributes(nextSelected);
+    setEditingShares((current) => rebalanceSkillAttributeShares(nextSelected, current));
+  };
+
   const toggleAttribute = (value: AttributeType) => {
-    setSelected((current) =>
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value]
-    );
+    const nextSelected = selected.includes(value)
+      ? selected.filter((item) => item !== value)
+      : [...selected, value];
+
+    setSelectedWithShares(nextSelected);
   };
 
   const toggleEditingAttribute = (value: AttributeType) => {
-    setEditingAttributes((current) =>
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value]
-    );
+    const nextSelected = editingAttributes.includes(value)
+      ? editingAttributes.filter((item) => item !== value)
+      : [...editingAttributes, value];
+
+    setEditingWithShares(nextSelected);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -85,13 +120,18 @@ export default function SkillsPage() {
     try {
       const response = await api.post<SkillResponse>("/skills", {
         name,
-        attributes: selected
+        attributes: selected,
+        attributeShares: selectedShares.map((share) => ({
+          attributeType: share.attributeType,
+          percent: share.percent
+        }))
       });
       setSkills((current) =>
         [...current, response].sort((a, b) => a.name.localeCompare(b.name))
       );
       setName("");
       setSelected([]);
+      setSelectedShares([]);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -106,13 +146,36 @@ export default function SkillsPage() {
   const startEditing = (skill: SkillResponse) => {
     setEditingSkillId(skill.userSkillId);
     setEditingName(skill.name);
-    setEditingAttributes(skill.attributes as AttributeType[]);
+
+    const attributes = skill.attributes as AttributeType[];
+    setEditingAttributes(attributes);
+
+    const responseShares = skill.attributeShares
+      .map((share) => {
+        if (!attributes.includes(share.attributeType as AttributeType)) {
+          return null;
+        }
+
+        return {
+          attributeType: share.attributeType as AttributeType,
+          percent: share.percent
+        } satisfies SkillAttributeShare;
+      })
+      .filter((item): item is SkillAttributeShare => item !== null);
+
+    setEditingShares(
+      rebalanceSkillAttributeShares(
+        attributes,
+        responseShares.length > 0 ? responseShares : []
+      )
+    );
   };
 
   const cancelEditing = () => {
     setEditingSkillId(null);
     setEditingName("");
     setEditingAttributes([]);
+    setEditingShares([]);
   };
 
   const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -127,7 +190,11 @@ export default function SkillsPage() {
     try {
       const response = await api.patch<SkillResponse>(`/skills/${editingSkillId}`, {
         name: editingName,
-        attributes: editingAttributes
+        attributes: editingAttributes,
+        attributeShares: editingShares.map((share) => ({
+          attributeType: share.attributeType,
+          percent: share.percent
+        }))
       });
       setSkills((current) =>
         current
@@ -177,9 +244,7 @@ export default function SkillsPage() {
     <section className="skills-grid">
       <div className="card">
         <h2>Добавить навык</h2>
-        <p className="muted">
-          Создайте личный навык и свяжите его с характеристиками.
-        </p>
+        <p className="muted">Создайте личный навык и свяжите его с характеристиками.</p>
         <form className="form" onSubmit={handleSubmit}>
           <label className="field">
             <span>Название навыка</span>
@@ -216,6 +281,22 @@ export default function SkillsPage() {
             </div>
           </div>
 
+          {selectedShares.length > 1 && (
+            <div className="field">
+              <span>Распределение вклада по характеристикам</span>
+              <SkillAttributeDistributionSlider
+                shares={selectedShares}
+                onChange={setSelectedShares}
+              />
+              <span className="muted">
+                Чем больше процент, тем больше очков характеристика получит от навыка.
+              </span>
+            </div>
+          )}
+
+          {hasInvalidCreateShareState && (
+            <div className="error">Сумма процентов распределения должна быть ровно 100%.</div>
+          )}
           {error && <div className="error">{error}</div>}
           <button className="primary" type="submit" disabled={!canSubmit}>
             {busy ? "Сохраняем..." : "Добавить навык"}
@@ -276,24 +357,22 @@ export default function SkillsPage() {
                     {skill.attributes.length === 0 ? (
                       <span className="pill muted">Без характеристик</span>
                     ) : (
-                      skill.attributes.map((attr) => (
-                        <span
-                          key={attr}
-                          className="pill attribute-pill"
-                          data-attribute={attr}
-                        >
-                          {ATTRIBUTE_LABELS[attr] ?? attr}
-                        </span>
-                      ))
+                      skill.attributes.map((attr) => {
+                        const share = skill.attributeShares.find(
+                          (item) => item.attributeType === attr
+                        );
+                        return (
+                          <span key={attr} className="pill attribute-pill" data-attribute={attr}>
+                            {ATTRIBUTE_LABELS[attr] ?? attr}
+                            {share ? ` ${share.percent}%` : ""}
+                          </span>
+                        );
+                      })
                     )}
                   </div>
                 </div>
                 <div className="list-actions">
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => startEditing(skill)}
-                  >
+                  <button className="ghost" type="button" onClick={() => startEditing(skill)}>
                     Редактировать
                   </button>
                   <button
@@ -346,6 +425,23 @@ export default function SkillsPage() {
                 ))}
               </div>
             </div>
+
+            {editingShares.length > 1 && (
+              <div className="field">
+                <span>Распределение вклада по характеристикам</span>
+                <SkillAttributeDistributionSlider
+                  shares={editingShares}
+                  onChange={setEditingShares}
+                />
+                <span className="muted">
+                  Чем больше процент, тем больше очков характеристика получит от навыка.
+                </span>
+              </div>
+            )}
+
+            {hasInvalidEditShareState && (
+              <div className="error">Сумма процентов распределения должна быть ровно 100%.</div>
+            )}
             {error && <div className="error">{error}</div>}
             <div className="button-row">
               <button className="primary" type="submit" disabled={!canEditSubmit}>

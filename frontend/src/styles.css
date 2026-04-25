@@ -726,6 +726,64 @@ input[type="date"]::-webkit-inner-spin-button {
 .attribute-option[data-attribute="Charisma"] { --attr-color: var(--attr-charisma); }
 .attribute-option[data-attribute="Discipline"] { --attr-color: var(--attr-discipline); }
 
+.skill-share-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.skill-share-track {
+  position: relative;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(12, 16, 31, 0.85);
+  overflow: hidden;
+}
+
+.skill-share-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.skill-share-handle {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 2px solid var(--accent-2);
+  background: rgba(10, 12, 22, 0.92);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: ew-resize;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  touch-action: none;
+  z-index: 2;
+}
+
+.skill-share-handle:hover {
+  background: rgba(20, 24, 38, 0.98);
+}
+
+.skill-share-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skill-share-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
