@@ -24,7 +24,6 @@ type UserSkill = {
   level: number;
   currentUses: number;
   requiredUsesForNextLevel: number;
-  streakDays: number;
   attributes: string[];
 };
 
