@@ -71,6 +71,14 @@ export default function ProfilePage() {
       )
     : 0;
 
+  const maxAttributeValue = useMemo(() => {
+    if (!profile || profile.attributes.length === 0) {
+      return 0;
+    }
+
+    return Math.max(...profile.attributes.map((attribute) => attribute.value), 0);
+  }, [profile]);
+
   useEffect(() => {
     if (!user) {
       setProfile(null);
@@ -188,19 +196,32 @@ export default function ProfilePage() {
           {profile ? (
             <div className="attribute-list">
               {profile.attributes.map((attribute) => (
-                <div
-                  key={attribute.type}
-                  className="attribute-row"
-                  data-attribute={attribute.type}
-                  title={
-                    ATTRIBUTE_DESCRIPTIONS[attribute.type as AttributeType] ?? attribute.type
-                  }
-                >
-                  <span className="attribute-name">
-                    {ATTRIBUTE_LABELS[attribute.type] ?? attribute.type}
-                  </span>
-                  <span className="attribute-value">{attribute.value.toFixed(2)}</span>
-                </div>
+                (() => {
+                  const fillPercent =
+                    maxAttributeValue <= 0
+                      ? 0
+                      : Math.min(50, (Math.max(0, attribute.value) / maxAttributeValue) * 50);
+
+                  return (
+                    <div
+                      key={attribute.type}
+                      className="attribute-row"
+                      data-attribute={attribute.type}
+                      title={
+                        ATTRIBUTE_DESCRIPTIONS[attribute.type as AttributeType] ?? attribute.type
+                      }
+                    >
+                      <div
+                        className="attribute-row-fill"
+                        style={{ width: `${fillPercent.toFixed(2)}%` }}
+                      />
+                      <span className="attribute-name">
+                        {ATTRIBUTE_LABELS[attribute.type] ?? attribute.type}
+                      </span>
+                      <span className="attribute-value">{attribute.value.toFixed(2)}</span>
+                    </div>
+                  );
+                })()
               ))}
             </div>
           ) : (

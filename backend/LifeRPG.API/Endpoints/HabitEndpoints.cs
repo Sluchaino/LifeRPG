@@ -299,8 +299,8 @@ namespace LifeRPG.API.Endpoints
                 if (discipline is not null)
                 {
                     discipline.Value = shouldComplete
-                        ? discipline.Value + 1
-                        : Math.Max(0, discipline.Value - 1);
+                        ? Math.Round(discipline.Value + 1d, 2, MidpointRounding.AwayFromZero)
+                        : Math.Max(0d, Math.Round(discipline.Value - 1d, 2, MidpointRounding.AwayFromZero));
                     discipline.UpdatedAtUtc = DateTime.UtcNow;
                 }
 
@@ -365,7 +365,7 @@ namespace LifeRPG.API.Endpoints
 
         public sealed record HabitsResponse(
             string Date,
-            int Discipline,
+            double Discipline,
             int TotalHabits,
             int CompletedHabits,
             IReadOnlyList<HabitResponse> Habits);
@@ -374,6 +374,6 @@ namespace LifeRPG.API.Endpoints
             Guid HabitId,
             bool IsCompleted,
             string Date,
-            int DisciplineValue);
+            double DisciplineValue);
     }
 }

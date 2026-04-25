@@ -71,7 +71,7 @@ namespace LifeRPG.API.Endpoints
                         Id = Guid.NewGuid(),
                         ProfileId = profileId,
                         AttributeType = attributeType,
-                        Value = 0,
+                        Value = 0d,
                         UpdatedAtUtc = now
                     })
                     .ToList()

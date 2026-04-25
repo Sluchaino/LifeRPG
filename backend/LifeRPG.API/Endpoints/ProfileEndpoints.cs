@@ -49,7 +49,9 @@ namespace LifeRPG.API.Endpoints
                 experienceState.ExperienceToNextLevel,
                 user.Profile.Attributes
                     .OrderBy(x => x.AttributeType)
-                    .Select(x => new AttributeResponse(x.AttributeType.ToString(), x.Value))
+                    .Select(x => new AttributeResponse(
+                        x.AttributeType.ToString(),
+                        Math.Round(x.Value, 2, MidpointRounding.AwayFromZero)))
                     .ToList());
 
             return Results.Ok(response);
@@ -67,6 +69,6 @@ namespace LifeRPG.API.Endpoints
 
         public sealed record AttributeResponse(
             string Type,
-            int Value);
+            double Value);
     }
 }

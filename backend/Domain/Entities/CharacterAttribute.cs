@@ -10,7 +10,7 @@ namespace Domain.Entities
         public Guid Id { get; set; }
         public Guid ProfileId { get; set; }
         public AttributeType AttributeType { get; set; }
-        public int Value { get; set; }
+        public double Value { get; set; }
         public DateTime UpdatedAtUtc { get; set; }
 
         public CharacterProfile Profile { get; set; } = default!;

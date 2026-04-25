@@ -555,7 +555,7 @@ namespace LifeRPG.API.Endpoints
                 dbContext,
                 cancellationToken);
 
-            var attributeDeltas = new Dictionary<AttributeType, int>();
+            var attributeDeltas = new Dictionary<AttributeType, double>();
             if (wasCompleted)
             {
                 AddAttributeDeltas(
@@ -896,38 +896,41 @@ namespace LifeRPG.API.Endpoints
             };
         }
 
-        private static int GetTaskAttributeGainForDifficulty(Difficulty difficulty)
+        private static double GetTaskAttributeGainForDifficulty(Difficulty difficulty)
         {
             return difficulty switch
             {
-                Difficulty.Easy => 1,
-                Difficulty.Medium => 2,
-                Difficulty.Hard => 3,
-                _ => 2
+                Difficulty.Easy => 1d,
+                Difficulty.Medium => 2d,
+                Difficulty.Hard => 3d,
+                _ => 2d
             };
         }
 
-        private static int GetSkillAttributeGainForDifficulty(Difficulty difficulty)
+        private static double GetSkillAttributeGainForDifficulty(Difficulty difficulty)
         {
             return difficulty switch
             {
-                Difficulty.Easy => 1,
-                Difficulty.Medium => 1,
-                Difficulty.Hard => 2,
-                _ => 1
+                Difficulty.Easy => 1d,
+                Difficulty.Medium => 2d,
+                Difficulty.Hard => 3d,
+                _ => 2d
             };
         }
 
-        private static Dictionary<AttributeType, int> BuildAttributeDeltasForTaskCompletion(
+        private static Dictionary<AttributeType, double> BuildAttributeDeltasForTaskCompletion(
             IEnumerable<AttributeType> taskAttributes,
             IEnumerable<Guid> skillIds,
             Difficulty difficulty,
             IReadOnlyDictionary<Guid, IReadOnlyList<SkillAttributeShare>> skillAttributesBySkillId)
         {
-            var deltas = new Dictionary<AttributeType, int>();
+            var deltas = new Dictionary<AttributeType, double>();
+            var directTaskAttributes = taskAttributes
+                .Distinct()
+                .ToHashSet();
 
             var taskAttributeGain = GetTaskAttributeGainForDifficulty(difficulty);
-            foreach (var attributeType in taskAttributes.Distinct())
+            foreach (var attributeType in directTaskAttributes)
             {
                 AddAttributeDelta(deltas, attributeType, taskAttributeGain);
             }
@@ -946,6 +949,13 @@ namespace LifeRPG.API.Endpoints
 
                 foreach (var (attributeType, delta) in distributedDeltas)
                 {
+                    if (directTaskAttributes.Contains(attributeType))
+                    {
+                        // Если характеристика уже выбрана напрямую в задаче,
+                        // не дублируем прирост от связанного навыка.
+                        continue;
+                    }
+
                     AddAttributeDelta(deltas, attributeType, delta);
                 }
             }
@@ -953,11 +963,11 @@ namespace LifeRPG.API.Endpoints
             return deltas;
         }
 
-        private static Dictionary<AttributeType, int> DistributeSkillAttributeGain(
+        private static Dictionary<AttributeType, double> DistributeSkillAttributeGain(
             IReadOnlyList<SkillAttributeShare> attributeShares,
-            int totalGain)
+            double totalGain)
         {
-            var result = new Dictionary<AttributeType, int>();
+            var result = new Dictionary<AttributeType, double>();
             if (totalGain <= 0 || attributeShares.Count == 0)
             {
                 return result;
@@ -982,29 +992,35 @@ namespace LifeRPG.API.Endpoints
                 return result;
             }
 
+            var totalUnits = (int)Math.Round(totalGain * 100d, MidpointRounding.AwayFromZero);
+            if (totalUnits <= 0)
+            {
+                return result;
+            }
+
             var allocations = normalizedShares
                 .Select(x =>
                 {
-                    var weighted = totalGain * (double)x.SharePercent / totalPercent;
-                    var baseValue = (int)Math.Floor(weighted);
+                    var weightedUnits = totalUnits * (double)x.SharePercent / totalPercent;
+                    var baseValue = (int)Math.Floor(weightedUnits);
                     return new
                     {
                         x.AttributeType,
                         BaseValue = baseValue,
-                        Fraction = weighted - baseValue,
+                        Fraction = weightedUnits - baseValue,
                         Percent = x.SharePercent
                     };
                 })
                 .ToList();
 
             var allocated = allocations.Sum(x => x.BaseValue);
-            var remaining = totalGain - allocated;
+            var remaining = totalUnits - allocated;
 
             foreach (var allocation in allocations)
             {
                 if (allocation.BaseValue > 0)
                 {
-                    AddAttributeDelta(result, allocation.AttributeType, allocation.BaseValue);
+                    AddAttributeDelta(result, allocation.AttributeType, allocation.BaseValue / 100d);
                 }
             }
 
@@ -1019,15 +1035,15 @@ namespace LifeRPG.API.Endpoints
                 .ThenBy(x => x.AttributeType)
                 .Take(remaining))
             {
-                AddAttributeDelta(result, allocation.AttributeType, 1);
+                AddAttributeDelta(result, allocation.AttributeType, 0.01d);
             }
 
             return result;
         }
 
         private static void AddAttributeDeltas(
-            IDictionary<AttributeType, int> target,
-            IReadOnlyDictionary<AttributeType, int> source,
+            IDictionary<AttributeType, double> target,
+            IReadOnlyDictionary<AttributeType, double> source,
             int sign)
         {
             if (sign == 0 || source.Count == 0)
@@ -1042,9 +1058,9 @@ namespace LifeRPG.API.Endpoints
         }
 
         private static void AddAttributeDelta(
-            IDictionary<AttributeType, int> target,
+            IDictionary<AttributeType, double> target,
             AttributeType attributeType,
-            int delta)
+            double delta)
         {
             if (delta == 0)
             {
@@ -1053,11 +1069,11 @@ namespace LifeRPG.API.Endpoints
 
             if (target.TryGetValue(attributeType, out var existing))
             {
-                target[attributeType] = existing + delta;
+                target[attributeType] = RoundTo2(existing + delta);
                 return;
             }
 
-            target[attributeType] = delta;
+            target[attributeType] = RoundTo2(delta);
         }
 
         private static async Task<Dictionary<Guid, IReadOnlyList<SkillAttributeShare>>> LoadSkillAttributesMapAsync(
@@ -1103,7 +1119,7 @@ namespace LifeRPG.API.Endpoints
 
         private static async Task ApplyAttributeDeltasAsync(
             Guid userId,
-            IReadOnlyDictionary<AttributeType, int> attributeDeltas,
+            IReadOnlyDictionary<AttributeType, double> attributeDeltas,
             AppDbContext dbContext,
             CancellationToken cancellationToken)
         {
@@ -1132,10 +1148,13 @@ namespace LifeRPG.API.Endpoints
                     continue;
                 }
 
-                attribute.Value = Math.Max(0, attribute.Value + delta);
+                attribute.Value = Math.Max(0d, RoundTo2(attribute.Value + delta));
                 attribute.UpdatedAtUtc = now;
             }
         }
+
+        private static double RoundTo2(double value) =>
+            Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
         private static int GetSkillUsesForDifficulty(Difficulty difficulty)
         {
@@ -1405,7 +1424,7 @@ namespace LifeRPG.API.Endpoints
 
             if (discipline is not null)
             {
-                discipline.Value += 1;
+                discipline.Value = RoundTo2(discipline.Value + 1d);
                 discipline.UpdatedAtUtc = DateTime.UtcNow;
             }
         }

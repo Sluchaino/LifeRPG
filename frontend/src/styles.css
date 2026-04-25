@@ -411,6 +411,8 @@ a {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
+  overflow: hidden;
   padding: 12px 14px;
   border-radius: 14px;
   background: rgba(12, 16, 31, 0.7);
@@ -419,16 +421,32 @@ a {
   border-left: 4px solid var(--attr-color, var(--border));
 }
 
+.attribute-row-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  background: linear-gradient(90deg, var(--attr-soft, rgba(255, 255, 255, 0.12)), transparent);
+  opacity: 0.75;
+  pointer-events: none;
+  transition: width 0.25s ease;
+}
+
 .attribute-name {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1.2px;
   color: var(--attr-color, var(--muted));
+  position: relative;
+  z-index: 1;
 }
 
 .attribute-value {
   font-size: 18px;
   font-weight: 600;
+  position: relative;
+  z-index: 1;
 }
 
 .attribute-row:hover {
@@ -436,14 +454,14 @@ a {
   transform: translateX(2px);
 }
 
-.attribute-row[data-attribute="Strength"] { --attr-color: var(--attr-strength); }
-.attribute-row[data-attribute="Endurance"] { --attr-color: var(--attr-endurance); }
-.attribute-row[data-attribute="Health"] { --attr-color: var(--attr-health); }
-.attribute-row[data-attribute="Intelligence"] { --attr-color: var(--attr-intelligence); }
-.attribute-row[data-attribute="Wisdom"] { --attr-color: var(--attr-wisdom); }
-.attribute-row[data-attribute="Agility"] { --attr-color: var(--attr-agility); }
-.attribute-row[data-attribute="Charisma"] { --attr-color: var(--attr-charisma); }
-.attribute-row[data-attribute="Discipline"] { --attr-color: var(--attr-discipline); }
+.attribute-row[data-attribute="Strength"] { --attr-color: var(--attr-strength); --attr-soft: var(--attr-strength-soft); }
+.attribute-row[data-attribute="Endurance"] { --attr-color: var(--attr-endurance); --attr-soft: var(--attr-endurance-soft); }
+.attribute-row[data-attribute="Health"] { --attr-color: var(--attr-health); --attr-soft: var(--attr-health-soft); }
+.attribute-row[data-attribute="Intelligence"] { --attr-color: var(--attr-intelligence); --attr-soft: var(--attr-intelligence-soft); }
+.attribute-row[data-attribute="Wisdom"] { --attr-color: var(--attr-wisdom); --attr-soft: var(--attr-wisdom-soft); }
+.attribute-row[data-attribute="Agility"] { --attr-color: var(--attr-agility); --attr-soft: var(--attr-agility-soft); }
+.attribute-row[data-attribute="Charisma"] { --attr-color: var(--attr-charisma); --attr-soft: var(--attr-charisma-soft); }
+.attribute-row[data-attribute="Discipline"] { --attr-color: var(--attr-discipline); --attr-soft: var(--attr-discipline-soft); }
 
 .attribute-pill {
   border-color: var(--attr-color, var(--border));
