@@ -15,6 +15,7 @@
   --shadow: 0 24px 60px rgba(11, 14, 28, 0.45);
   --attr-strength: #ff6b6b;
   --attr-endurance: #ffb347;
+  --attr-health: #34d399;
   --attr-intelligence: #7dd3fc;
   --attr-wisdom: #5eead4;
   --attr-agility: #a3e635;
@@ -22,6 +23,7 @@
   --attr-discipline: #facc15;
   --attr-strength-soft: rgba(255, 107, 107, 0.18);
   --attr-endurance-soft: rgba(255, 179, 71, 0.18);
+  --attr-health-soft: rgba(52, 211, 153, 0.18);
   --attr-intelligence-soft: rgba(125, 211, 252, 0.18);
   --attr-wisdom-soft: rgba(94, 234, 212, 0.18);
   --attr-agility-soft: rgba(163, 230, 53, 0.18);
@@ -436,6 +438,7 @@ a {
 
 .attribute-row[data-attribute="Strength"] { --attr-color: var(--attr-strength); }
 .attribute-row[data-attribute="Endurance"] { --attr-color: var(--attr-endurance); }
+.attribute-row[data-attribute="Health"] { --attr-color: var(--attr-health); }
 .attribute-row[data-attribute="Intelligence"] { --attr-color: var(--attr-intelligence); }
 .attribute-row[data-attribute="Wisdom"] { --attr-color: var(--attr-wisdom); }
 .attribute-row[data-attribute="Agility"] { --attr-color: var(--attr-agility); }
@@ -450,6 +453,7 @@ a {
 
 .attribute-pill[data-attribute="Strength"] { --attr-color: var(--attr-strength); --attr-soft: var(--attr-strength-soft); }
 .attribute-pill[data-attribute="Endurance"] { --attr-color: var(--attr-endurance); --attr-soft: var(--attr-endurance-soft); }
+.attribute-pill[data-attribute="Health"] { --attr-color: var(--attr-health); --attr-soft: var(--attr-health-soft); }
 .attribute-pill[data-attribute="Intelligence"] { --attr-color: var(--attr-intelligence); --attr-soft: var(--attr-intelligence-soft); }
 .attribute-pill[data-attribute="Wisdom"] { --attr-color: var(--attr-wisdom); --attr-soft: var(--attr-wisdom-soft); }
 .attribute-pill[data-attribute="Agility"] { --attr-color: var(--attr-agility); --attr-soft: var(--attr-agility-soft); }
@@ -715,6 +719,7 @@ input[type="date"]::-webkit-inner-spin-button {
 
 .attribute-option[data-attribute="Strength"] { --attr-color: var(--attr-strength); }
 .attribute-option[data-attribute="Endurance"] { --attr-color: var(--attr-endurance); }
+.attribute-option[data-attribute="Health"] { --attr-color: var(--attr-health); }
 .attribute-option[data-attribute="Intelligence"] { --attr-color: var(--attr-intelligence); }
 .attribute-option[data-attribute="Wisdom"] { --attr-color: var(--attr-wisdom); }
 .attribute-option[data-attribute="Agility"] { --attr-color: var(--attr-agility); }

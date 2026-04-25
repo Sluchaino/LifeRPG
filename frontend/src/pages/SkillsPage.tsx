@@ -15,7 +15,6 @@ type SkillResponse = {
   level: number;
   currentUses: number;
   requiredUsesForNextLevel: number;
-  streakDays: number;
   attributes: string[];
 };
 
@@ -248,9 +247,9 @@ export default function SkillsPage() {
               </span>
             </div>
             <div className="stat-box">
-              <span className="stat-label">Лучшая серия</span>
+              <span className="stat-label">С привязкой к характеристикам</span>
               <span className="stat-number">
-                {Math.max(...skills.map((skill) => skill.streakDays))}
+                {skills.filter((skill) => skill.attributes.length > 0).length}
               </span>
             </div>
           </div>
@@ -271,7 +270,7 @@ export default function SkillsPage() {
                   <div className="list-title">{skill.name}</div>
                   <div className="list-meta">
                     Уровень {skill.level} · Использования {skill.currentUses}/
-                    {skill.requiredUsesForNextLevel} · Серия {skill.streakDays}
+                    {skill.requiredUsesForNextLevel}
                   </div>
                   <div className="list-tags">
                     {skill.attributes.length === 0 ? (

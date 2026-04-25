@@ -39,7 +39,6 @@ namespace LifeRPG.API.Endpoints
                     x.Level,
                     x.CurrentUses,
                     x.RequiredUsesForNextLevel,
-                    x.StreakDays,
                     x.Attributes
                         .Where(a => a.AttributeType != AttributeType.Discipline)
                         .OrderBy(a => a.AttributeType)
@@ -98,7 +97,6 @@ namespace LifeRPG.API.Endpoints
                 Level = 1,
                 CurrentUses = 0,
                 RequiredUsesForNextLevel = 7,
-                StreakDays = 0,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now,
                 Attributes = attributes
@@ -124,7 +122,6 @@ namespace LifeRPG.API.Endpoints
                 userSkill.Level,
                 userSkill.CurrentUses,
                 userSkill.RequiredUsesForNextLevel,
-                userSkill.StreakDays,
                 userSkill.Attributes
                     .Where(a => a.AttributeType != AttributeType.Discipline)
                     .OrderBy(a => a.AttributeType)
@@ -207,7 +204,6 @@ namespace LifeRPG.API.Endpoints
                 userSkill.Level,
                 userSkill.CurrentUses,
                 userSkill.RequiredUsesForNextLevel,
-                userSkill.StreakDays,
                 userSkill.Attributes
                     .Where(a => a.AttributeType != AttributeType.Discipline)
                     .OrderBy(a => a.AttributeType)
@@ -280,7 +276,6 @@ namespace LifeRPG.API.Endpoints
             int Level,
             int CurrentUses,
             int RequiredUsesForNextLevel,
-            int StreakDays,
             IReadOnlyList<string> Attributes);
     }
 }

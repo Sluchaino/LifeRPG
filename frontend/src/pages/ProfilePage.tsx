@@ -27,7 +27,6 @@ type SkillResponse = {
   level: number;
   currentUses: number;
   requiredUsesForNextLevel: number;
-  streakDays: number;
   attributes: string[];
 };
 
@@ -212,7 +211,7 @@ export default function ProfilePage() {
                   <div className="list-title">{skill.name}</div>
                     <div className="list-meta">
                       Уровень {skill.level} · Использования {skill.currentUses}/
-                      {skill.requiredUsesForNextLevel} · Серия {skill.streakDays}
+                      {skill.requiredUsesForNextLevel}
                     </div>
                     <div className="list-tags">
                       {skill.attributes.length === 0 ? (

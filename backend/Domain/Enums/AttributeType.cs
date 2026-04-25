@@ -12,6 +12,7 @@ namespace Domain.Enums
         Wisdom = 4,
         Agility = 5,
         Charisma = 6,
-        Discipline = 7
+        Discipline = 7,
+        Health = 8
     }
 }

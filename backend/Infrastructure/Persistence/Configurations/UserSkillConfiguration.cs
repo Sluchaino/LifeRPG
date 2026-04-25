@@ -26,7 +26,6 @@ namespace Infrastructure.Persistence.Configurations
             builder.Property(x => x.Level).IsRequired();
             builder.Property(x => x.CurrentUses).IsRequired();
             builder.Property(x => x.RequiredUsesForNextLevel).IsRequired();
-            builder.Property(x => x.StreakDays).IsRequired();
             builder.Property(x => x.CreatedAtUtc).IsRequired();
             builder.Property(x => x.UpdatedAtUtc).IsRequired();
 
