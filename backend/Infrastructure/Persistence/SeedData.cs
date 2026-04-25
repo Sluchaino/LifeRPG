@@ -1,4 +1,3 @@
-using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,24 +7,35 @@ namespace Infrastructure.Persistence
     {
         public static async Task InitializeAsync(AppDbContext dbContext)
         {
-            var profiles = await dbContext.CharacterProfiles
-                .Include(x => x.Attributes)
+            var profileIds = await dbContext.CharacterProfiles
+                .AsNoTracking()
+                .Select(x => x.Id)
                 .ToListAsync();
 
-            if (profiles.Count == 0)
+            if (profileIds.Count == 0)
             {
                 return;
             }
 
+            var existingAttributesByProfile = await dbContext.CharacterAttributes
+                .AsNoTracking()
+                .Where(x => profileIds.Contains(x.ProfileId))
+                .GroupBy(x => x.ProfileId)
+                .ToDictionaryAsync(
+                    x => x.Key,
+                    x => x
+                        .Select(y => y.AttributeType)
+                        .ToHashSet());
+
             var allAttributeTypes = Enum.GetValues<AttributeType>();
             var now = DateTime.UtcNow;
-            var hasChanges = false;
+            var attributesToInsert = new List<CharacterAttribute>();
 
-            foreach (var profile in profiles)
+            foreach (var profileId in profileIds)
             {
-                var existingAttributes = profile.Attributes
-                    .Select(x => x.AttributeType)
-                    .ToHashSet();
+                var existingAttributes = existingAttributesByProfile.TryGetValue(profileId, out var set)
+                    ? set
+                    : new HashSet<AttributeType>();
 
                 foreach (var attributeType in allAttributeTypes)
                 {
@@ -34,20 +44,20 @@ namespace Infrastructure.Persistence
                         continue;
                     }
 
-                    profile.Attributes.Add(new CharacterAttribute
+                    attributesToInsert.Add(new CharacterAttribute
                     {
                         Id = Guid.NewGuid(),
-                        ProfileId = profile.Id,
+                        ProfileId = profileId,
                         AttributeType = attributeType,
                         Value = 0,
                         UpdatedAtUtc = now
                     });
-                    hasChanges = true;
                 }
             }
 
-            if (hasChanges)
+            if (attributesToInsert.Count > 0)
             {
+                dbContext.CharacterAttributes.AddRange(attributesToInsert);
                 await dbContext.SaveChangesAsync();
             }
         }
