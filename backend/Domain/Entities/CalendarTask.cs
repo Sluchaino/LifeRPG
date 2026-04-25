@@ -12,8 +12,12 @@ namespace Domain.Entities
         public DateOnly Date { get; set; }
         public string Title { get; set; } = default!;
         public string? Details { get; set; }
+        public TaskImportance Importance { get; set; }
         public Difficulty Difficulty { get; set; }
         public bool IsCompleted { get; set; }
+        public DateTime? CompletedAtUtc { get; set; }
+        public int ExperienceAwarded { get; set; }
+        public bool IsFirstTaskBonusApplied { get; set; }
         public Guid? HabitId { get; set; }
         public TimeOnly? StartTime { get; set; }
         public TimeOnly? EndTime { get; set; }

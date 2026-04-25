@@ -22,6 +22,12 @@ namespace Infrastructure.Persistence.Configurations
             builder.Property(x => x.Details)
                 .HasMaxLength(500);
 
+            builder.Property(x => x.Importance)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .HasDefaultValue(TaskImportance.Optional)
+                .IsRequired();
+
             builder.Property(x => x.Difficulty)
                 .HasConversion<string>()
                 .HasMaxLength(20)
@@ -29,6 +35,16 @@ namespace Infrastructure.Persistence.Configurations
                 .IsRequired();
 
             builder.Property(x => x.IsCompleted)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            builder.Property(x => x.CompletedAtUtc);
+
+            builder.Property(x => x.ExperienceAwarded)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            builder.Property(x => x.IsFirstTaskBonusApplied)
                 .HasDefaultValue(false)
                 .IsRequired();
 

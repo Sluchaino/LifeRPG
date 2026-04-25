@@ -327,6 +327,20 @@ a {
   padding-top: 12px;
 }
 
+.calendar-tasks h4 {
+  margin: 0 0 10px;
+}
+
+.split-list {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: start;
+}
+
+.inline-link {
+  color: var(--accent-2);
+  text-decoration: underline;
+}
+
 .profile-card {
   display: grid;
   gap: 24px;
@@ -930,6 +944,29 @@ input[type="date"]::-webkit-inner-spin-button {
   background: rgba(34, 197, 94, 0.14);
 }
 
+.pill.importance-pill {
+  border-width: 1px;
+  font-weight: 600;
+}
+
+.pill.importance-pill.required {
+  color: #fee2e2;
+  border-color: rgba(220, 38, 38, 0.5);
+  background: rgba(220, 38, 38, 0.22);
+}
+
+.pill.importance-pill.important {
+  color: #ffedd5;
+  border-color: rgba(249, 115, 22, 0.5);
+  background: rgba(249, 115, 22, 0.2);
+}
+
+.pill.importance-pill.optional {
+  color: #d9f99d;
+  border-color: rgba(132, 204, 22, 0.5);
+  background: rgba(132, 204, 22, 0.2);
+}
+
 .chip.skill-pill {
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.14);
@@ -961,6 +998,67 @@ input[type="date"]::-webkit-inner-spin-button {
   border: none;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.compact-field {
+  min-width: 180px;
+}
+
+.compact-field input {
+  min-width: 180px;
+}
+
+.importance-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.importance-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(12, 16, 31, 0.7);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.importance-option input {
+  margin-top: 3px;
+}
+
+.importance-content {
+  display: grid;
+  gap: 4px;
+}
+
+.importance-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.importance-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.importance-option[data-importance="Required"] {
+  border-left: 4px solid #ef4444;
+}
+
+.importance-option[data-importance="Important"] {
+  border-left: 4px solid #f97316;
+}
+
+.importance-option[data-importance="Optional"] {
+  border-left: 4px solid #84cc16;
+}
+
+.importance-option.is-active {
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
 }
 
 .password-toggle {

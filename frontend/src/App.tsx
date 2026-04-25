@@ -6,6 +6,7 @@ import RegisterPage from "./pages/RegisterPage";
 import ProfilePage from "./pages/ProfilePage";
 import SkillsPage from "./pages/SkillsPage";
 import CalendarPage from "./pages/CalendarPage";
+import TasksPage from "./pages/TasksPage";
 import HabitsPage from "./pages/HabitsPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -24,6 +25,7 @@ export default function App() {
           <Link to="/profile">Профиль</Link>
           <Link to="/skills">Навыки</Link>
           <Link to="/habits">Привычки</Link>
+          <Link to="/tasks">Список дел</Link>
           <Link to="/calendar">Календарь</Link>
         </nav>
         <div className="auth-zone">
@@ -57,6 +59,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/habits" element={<HabitsPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
