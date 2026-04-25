@@ -199,7 +199,7 @@ export default function ProfilePage() {
                   <span className="attribute-name">
                     {ATTRIBUTE_LABELS[attribute.type] ?? attribute.type}
                   </span>
-                  <span className="attribute-value">{attribute.value}</span>
+                  <span className="attribute-value">{attribute.value.toFixed(2)}</span>
                 </div>
               ))}
             </div>
