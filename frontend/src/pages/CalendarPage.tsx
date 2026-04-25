@@ -219,6 +219,7 @@ export default function CalendarPage() {
     startTime: overrides?.startTime ?? task.startTime ?? null,
     endTime: overrides?.endTime ?? task.endTime ?? null,
     attributes: overrides?.attributes ?? task.attributes ?? [],
+    attributeShares: overrides?.attributeShares ?? task.attributeShares ?? [],
     skillIds: overrides?.skillIds ?? task.skillIds ?? [],
     habitId: overrides?.habitId ?? task.habitId ?? null
   });

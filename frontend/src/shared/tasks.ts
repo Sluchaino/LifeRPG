@@ -12,6 +12,7 @@ export type CalendarTask = {
   startTime?: string | null;
   endTime?: string | null;
   attributes: string[];
+  attributeShares?: { attributeType: string; percent: number }[];
   skillIds?: string[];
   habitId?: string | null;
   habitName?: string | null;

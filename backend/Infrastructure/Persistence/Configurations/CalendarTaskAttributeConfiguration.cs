@@ -8,7 +8,12 @@ namespace Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<CalendarTaskAttribute> builder)
         {
-            builder.ToTable("calendar_task_attributes");
+            builder.ToTable("calendar_task_attributes", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint(
+                    "ck_calendar_task_attributes_share_percent_range",
+                    "\"SharePercent\" > 0 AND \"SharePercent\" <= 100");
+            });
 
             builder.HasKey(x => new { x.CalendarTaskId, x.AttributeType });
 
@@ -16,6 +21,10 @@ namespace Infrastructure.Persistence.Configurations
                 .HasConversion<string>()
                 .HasMaxLength(50)
                 .IsRequired();
+
+            builder.Property(x => x.SharePercent)
+                .IsRequired()
+                .HasDefaultValue(100);
         }
     }
 }

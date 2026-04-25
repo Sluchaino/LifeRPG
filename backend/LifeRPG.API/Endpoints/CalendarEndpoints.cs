@@ -248,7 +248,16 @@ namespace LifeRPG.API.Endpoints
                 endTime = parsedEnd;
             }
 
-            var attributes = NormalizeAttributes(request.Attributes);
+            var attributeShareNormalization = NormalizeAttributeShares(
+                request.AttributeShares,
+                request.Attributes);
+
+            if (!attributeShareNormalization.IsValid)
+            {
+                return Results.BadRequest(new { error = attributeShareNormalization.ErrorMessage });
+            }
+
+            var attributeShares = attributeShareNormalization.Value!;
             var skillIds = await NormalizeSkillIdsAsync(
                 request.SkillIds,
                 userId.Value,
@@ -288,11 +297,12 @@ namespace LifeRPG.API.Endpoints
                 EndTime = endTime,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now,
-                Attributes = attributes
-                    .Select(attributeType => new CalendarTaskAttribute
+                Attributes = attributeShares
+                    .Select(attributeShare => new CalendarTaskAttribute
                     {
                         CalendarTaskId = Guid.Empty,
-                        AttributeType = attributeType
+                        AttributeType = attributeShare.AttributeType,
+                        SharePercent = attributeShare.SharePercent
                     })
                     .ToList(),
                 Skills = skillIds
@@ -325,7 +335,9 @@ namespace LifeRPG.API.Endpoints
                     cancellationToken);
 
                 var attributeDeltas = BuildAttributeDeltasForTaskCompletion(
-                    task.Attributes.Select(x => x.AttributeType),
+                    task.Attributes.Select(x => new AttributeShare(
+                        x.AttributeType,
+                        x.SharePercent)),
                     task.Skills.Select(x => x.UserSkillId),
                     task.Difficulty,
                     skillAttributesBySkillId);
@@ -468,7 +480,16 @@ namespace LifeRPG.API.Endpoints
                 endTime = parsedEnd;
             }
 
-            var attributes = NormalizeAttributes(request.Attributes);
+            var attributeShareNormalization = NormalizeAttributeShares(
+                request.AttributeShares,
+                request.Attributes);
+
+            if (!attributeShareNormalization.IsValid)
+            {
+                return Results.BadRequest(new { error = attributeShareNormalization.ErrorMessage });
+            }
+
+            var attributeShares = attributeShareNormalization.Value!;
             var skillIds = await NormalizeSkillIdsAsync(
                 request.SkillIds,
                 userId.Value,
@@ -496,7 +517,9 @@ namespace LifeRPG.API.Endpoints
             var previousDifficulty = task.Difficulty;
             var previousHabitId = task.HabitId;
             var previousTaskAttributes = task.Attributes
-                .Select(x => x.AttributeType)
+                .Select(x => new AttributeShare(
+                    x.AttributeType,
+                    x.SharePercent))
                 .Distinct()
                 .ToList();
             var previousSkillIds = task.Skills
@@ -532,11 +555,12 @@ namespace LifeRPG.API.Endpoints
             }
 
             dbContext.CalendarTaskAttributes.RemoveRange(task.Attributes);
-            task.Attributes = attributes
-                .Select(attributeType => new CalendarTaskAttribute
+            task.Attributes = attributeShares
+                .Select(attributeShare => new CalendarTaskAttribute
                 {
                     CalendarTaskId = task.Id,
-                    AttributeType = attributeType
+                    AttributeType = attributeShare.AttributeType,
+                    SharePercent = attributeShare.SharePercent
                 })
                 .ToList();
 
@@ -573,7 +597,9 @@ namespace LifeRPG.API.Endpoints
                 AddAttributeDeltas(
                     attributeDeltas,
                     BuildAttributeDeltasForTaskCompletion(
-                        task.Attributes.Select(x => x.AttributeType),
+                        task.Attributes.Select(x => new AttributeShare(
+                            x.AttributeType,
+                            x.SharePercent)),
                         task.Skills.Select(x => x.UserSkillId),
                         task.Difficulty,
                         skillAttributesBySkillId),
@@ -681,7 +707,9 @@ namespace LifeRPG.API.Endpoints
                     cancellationToken);
 
                 var attributeDeltas = BuildAttributeDeltasForTaskCompletion(
-                    task.Attributes.Select(x => x.AttributeType),
+                    task.Attributes.Select(x => new AttributeShare(
+                        x.AttributeType,
+                        x.SharePercent)),
                     task.Skills.Select(x => x.UserSkillId),
                     task.Difficulty,
                     skillAttributesBySkillId);
@@ -753,6 +781,12 @@ namespace LifeRPG.API.Endpoints
                 task.Attributes
                     .OrderBy(x => x.AttributeType)
                     .Select(x => x.AttributeType.ToString())
+                    .ToList(),
+                task.Attributes
+                    .OrderBy(x => x.AttributeType)
+                    .Select(x => new TaskAttributeShareResponse(
+                        x.AttributeType.ToString(),
+                        x.SharePercent))
                     .ToList(),
                 task.Skills
                     .OrderBy(x => x.UserSkillId)
@@ -919,20 +953,31 @@ namespace LifeRPG.API.Endpoints
         }
 
         private static Dictionary<AttributeType, double> BuildAttributeDeltasForTaskCompletion(
-            IEnumerable<AttributeType> taskAttributes,
+            IEnumerable<AttributeShare> taskAttributes,
             IEnumerable<Guid> skillIds,
             Difficulty difficulty,
             IReadOnlyDictionary<Guid, IReadOnlyList<SkillAttributeShare>> skillAttributesBySkillId)
         {
             var deltas = new Dictionary<AttributeType, double>();
-            var directTaskAttributes = taskAttributes
-                .Distinct()
+            var normalizedTaskAttributeShares = taskAttributes
+                .GroupBy(x => x.AttributeType)
+                .Select(group => new AttributeShare(
+                    group.Key,
+                    group.Sum(item => Math.Max(0, item.SharePercent))))
+                .Where(x => x.SharePercent > 0)
+                .ToList();
+
+            var directTaskAttributes = normalizedTaskAttributeShares
+                .Select(x => x.AttributeType)
                 .ToHashSet();
 
             var taskAttributeGain = GetTaskAttributeGainForDifficulty(difficulty);
-            foreach (var attributeType in directTaskAttributes)
+            var taskAttributeDeltas = DistributeAttributeGain(
+                normalizedTaskAttributeShares,
+                taskAttributeGain);
+            foreach (var (attributeType, delta) in taskAttributeDeltas)
             {
-                AddAttributeDelta(deltas, attributeType, taskAttributeGain);
+                AddAttributeDelta(deltas, attributeType, delta);
             }
 
             var skillAttributeGain = GetSkillAttributeGainForDifficulty(difficulty);
@@ -967,6 +1012,15 @@ namespace LifeRPG.API.Endpoints
             IReadOnlyList<SkillAttributeShare> attributeShares,
             double totalGain)
         {
+            return DistributeAttributeGain(
+                attributeShares.Select(x => new AttributeShare(x.AttributeType, x.SharePercent)).ToList(),
+                totalGain);
+        }
+
+        private static Dictionary<AttributeType, double> DistributeAttributeGain(
+            IReadOnlyList<AttributeShare> attributeShares,
+            double totalGain)
+        {
             var result = new Dictionary<AttributeType, double>();
             if (totalGain <= 0 || attributeShares.Count == 0)
             {
@@ -975,7 +1029,7 @@ namespace LifeRPG.API.Endpoints
 
             var normalizedShares = attributeShares
                 .GroupBy(x => x.AttributeType)
-                .Select(group => new SkillAttributeShare(
+                .Select(group => new AttributeShare(
                     group.Key,
                     group.Sum(x => Math.Max(0, x.SharePercent))))
                 .Where(x => x.SharePercent > 0)
@@ -1256,18 +1310,75 @@ namespace LifeRPG.API.Endpoints
             return 5 + normalizedLevel * 2;
         }
 
-        private static IReadOnlyList<AttributeType> NormalizeAttributes(
+        private static AttributeSharesNormalizationResult NormalizeAttributeShares(
+            IReadOnlyList<TaskAttributeShareRequest>? attributeShares,
             IReadOnlyList<AttributeType>? attributes)
         {
-            if (attributes is null || attributes.Count == 0)
+            if (attributeShares is not null && attributeShares.Count > 0)
             {
-                return Array.Empty<AttributeType>();
+                var normalized = attributeShares
+                    .Select(x => new AttributeShare(x.AttributeType, x.Percent))
+                    .OrderBy(x => x.AttributeType)
+                    .ToList();
+
+                if (normalized.Any(x => x.SharePercent <= 0 || x.SharePercent > 100))
+                {
+                    return AttributeSharesNormalizationResult.Invalid(
+                        "Процент распределения должен быть от 1 до 100.");
+                }
+
+                var hasDuplicates = normalized
+                    .GroupBy(x => x.AttributeType)
+                    .Any(group => group.Count() > 1);
+
+                if (hasDuplicates)
+                {
+                    return AttributeSharesNormalizationResult.Invalid(
+                        "Характеристики в распределении не должны повторяться.");
+                }
+
+                var totalPercent = normalized.Sum(x => x.SharePercent);
+                if (totalPercent != 100)
+                {
+                    return AttributeSharesNormalizationResult.Invalid(
+                        "Сумма процентов распределения должна быть равна 100.");
+                }
+
+                return AttributeSharesNormalizationResult.Valid(normalized);
             }
 
-            return attributes
+            if (attributes is null || attributes.Count == 0)
+            {
+                return AttributeSharesNormalizationResult.Valid(Array.Empty<AttributeShare>());
+            }
+
+            var normalizedAttributes = attributes
                 .Distinct()
                 .OrderBy(x => x)
                 .ToList();
+
+            if (normalizedAttributes.Count == 1)
+            {
+                return AttributeSharesNormalizationResult.Valid(
+                    new[] { new AttributeShare(normalizedAttributes[0], 100) });
+            }
+
+            var basePercent = 100 / normalizedAttributes.Count;
+            var remainder = 100 - basePercent * normalizedAttributes.Count;
+            var result = new List<AttributeShare>(normalizedAttributes.Count);
+
+            foreach (var attributeType in normalizedAttributes)
+            {
+                var extra = remainder > 0 ? 1 : 0;
+                if (remainder > 0)
+                {
+                    remainder -= 1;
+                }
+
+                result.Add(new AttributeShare(attributeType, basePercent + extra));
+            }
+
+            return AttributeSharesNormalizationResult.Valid(result);
         }
 
         private static Difficulty? NormalizeDifficulty(Difficulty difficulty)
@@ -1433,6 +1544,10 @@ namespace LifeRPG.API.Endpoints
             AttributeType AttributeType,
             int SharePercent);
 
+        private sealed record AttributeShare(
+            AttributeType AttributeType,
+            int SharePercent);
+
         public sealed record CreateCalendarTaskRequest(
             string Title,
             string Date,
@@ -1443,6 +1558,7 @@ namespace LifeRPG.API.Endpoints
             string? StartTime,
             string? EndTime,
             IReadOnlyList<AttributeType>? Attributes,
+            IReadOnlyList<TaskAttributeShareRequest>? AttributeShares,
             IReadOnlyList<Guid>? SkillIds,
             Guid? HabitId);
 
@@ -1456,8 +1572,13 @@ namespace LifeRPG.API.Endpoints
             string? StartTime,
             string? EndTime,
             IReadOnlyList<AttributeType>? Attributes,
+            IReadOnlyList<TaskAttributeShareRequest>? AttributeShares,
             IReadOnlyList<Guid>? SkillIds,
             Guid? HabitId);
+
+        public sealed record TaskAttributeShareRequest(
+            AttributeType AttributeType,
+            int Percent);
 
         public sealed record CalendarTaskResponse(
             Guid Id,
@@ -1470,10 +1591,29 @@ namespace LifeRPG.API.Endpoints
             string? StartTime,
             string? EndTime,
             IReadOnlyList<string> Attributes,
+            IReadOnlyList<TaskAttributeShareResponse> AttributeShares,
             IReadOnlyList<Guid> SkillIds,
             Guid? HabitId,
             string? HabitName,
             int ExperienceAwarded,
             bool IsFirstTaskBonusApplied);
+
+        public sealed record TaskAttributeShareResponse(
+            string AttributeType,
+            int Percent);
+
+        private sealed record AttributeSharesNormalizationResult(
+            bool IsValid,
+            string? ErrorMessage,
+            IReadOnlyList<AttributeShare>? Value)
+        {
+            public static AttributeSharesNormalizationResult Valid(
+                IReadOnlyList<AttributeShare> value) =>
+                new(true, null, value);
+
+            public static AttributeSharesNormalizationResult Invalid(
+                string errorMessage) =>
+                new(false, errorMessage, null);
+        }
     }
 }

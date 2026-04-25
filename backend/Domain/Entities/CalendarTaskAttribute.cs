@@ -9,6 +9,7 @@ namespace Domain.Entities
     {
         public Guid CalendarTaskId { get; set; }
         public AttributeType AttributeType { get; set; }
+        public int SharePercent { get; set; }
 
         public CalendarTask CalendarTask { get; set; } = default!;
     }

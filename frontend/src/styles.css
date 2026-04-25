@@ -749,6 +749,10 @@ input[type="date"]::-webkit-inner-spin-button {
   gap: 12px;
 }
 
+.task-attribute-share-wrapper {
+  margin-top: 12px;
+}
+
 .skill-share-track {
   position: relative;
   height: 44px;

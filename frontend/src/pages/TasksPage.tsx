@@ -17,6 +17,12 @@ import {
   compareTasks,
   formatLocalDate
 } from "../shared/tasks";
+import { SkillAttributeDistributionSlider } from "../shared/SkillAttributeDistributionSlider";
+import {
+  SkillAttributeShare,
+  hasInvalidSkillAttributeShares,
+  rebalanceSkillAttributeShares
+} from "../shared/skillAttributeShares";
 
 type UserSkill = {
   userSkillId: string;
@@ -40,6 +46,30 @@ const normalizeAttributes = (attributes: string[]) =>
   attributes.filter((value): value is AttributeType =>
     ATTRIBUTE_OPTIONS.some((option) => option.value === value)
   );
+
+const normalizeAttributeShares = (task: CalendarTask): SkillAttributeShare[] => {
+  const normalizedAttributes = normalizeAttributes(task.attributes ?? []);
+  if (normalizedAttributes.length === 0) {
+    return [];
+  }
+
+  const responseShares = (task.attributeShares ?? [])
+    .map((share) => ({
+      attributeType: share.attributeType as AttributeType,
+      percent: share.percent
+    }))
+    .filter(
+      (share) =>
+        normalizedAttributes.includes(share.attributeType) &&
+        Number.isFinite(share.percent)
+    );
+
+  if (responseShares.length === normalizedAttributes.length) {
+    return rebalanceSkillAttributeShares(normalizedAttributes, responseShares);
+  }
+
+  return rebalanceSkillAttributeShares(normalizedAttributes, []);
+};
 
 const parseTime = (value: string): number | null => {
   const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
@@ -73,6 +103,7 @@ export default function TasksPage() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [selectedAttributes, setSelectedAttributes] = useState<AttributeType[]>([]);
+  const [selectedAttributeShares, setSelectedAttributeShares] = useState<SkillAttributeShare[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [selectedHabitId, setSelectedHabitId] = useState("");
   const [skills, setSkills] = useState<UserSkill[]>([]);
@@ -178,11 +209,23 @@ export default function TasksPage() {
 
   const completedCount = tasks.filter((task) => task.isCompleted).length;
   const withTimeCount = tasks.filter((task) => task.startTime && task.endTime).length;
+  const hasInvalidShareState = useMemo(
+    () => hasInvalidSkillAttributeShares(selectedAttributeShares),
+    [selectedAttributeShares]
+  );
+
+  const setSelectedAttributesWithShares = (nextSelected: AttributeType[]) => {
+    setSelectedAttributes(nextSelected);
+    setSelectedAttributeShares((current) =>
+      rebalanceSkillAttributeShares(nextSelected, current)
+    );
+  };
 
   const toggleAttribute = (value: AttributeType) => {
-    setSelectedAttributes((current) =>
-      current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
-    );
+    const nextSelected = selectedAttributes.includes(value)
+      ? selectedAttributes.filter((item) => item !== value)
+      : [...selectedAttributes, value];
+    setSelectedAttributesWithShares(nextSelected);
   };
 
   const toggleSkill = (value: string) => {
@@ -201,6 +244,13 @@ export default function TasksPage() {
     startTime: overrides?.startTime ?? task.startTime ?? null,
     endTime: overrides?.endTime ?? task.endTime ?? null,
     attributes: overrides?.attributes ?? task.attributes ?? [],
+    attributeShares:
+      overrides?.attributeShares ??
+      task.attributeShares ??
+      normalizeAttributeShares(task).map((share) => ({
+        attributeType: share.attributeType,
+        percent: share.percent
+      })),
     skillIds: overrides?.skillIds ?? task.skillIds ?? [],
     habitId: overrides?.habitId ?? task.habitId ?? null
   });
@@ -214,7 +264,7 @@ export default function TasksPage() {
     setDifficulty("Medium");
     setStartTime("");
     setEndTime("");
-    setSelectedAttributes([]);
+    setSelectedAttributesWithShares([]);
     setSelectedSkills([]);
     setSelectedHabitId("");
     setFormError(null);
@@ -231,6 +281,7 @@ export default function TasksPage() {
     setStartTime(task.startTime ?? "");
     setEndTime(task.endTime ?? "");
     setSelectedAttributes(normalizeAttributes(task.attributes));
+    setSelectedAttributeShares(normalizeAttributeShares(task));
     setSelectedSkills(task.skillIds ?? []);
     setSelectedHabitId(task.habitId ?? "");
     setFormError(null);
@@ -270,6 +321,12 @@ export default function TasksPage() {
     setFormError(null);
     setSaving(true);
 
+    if (hasInvalidShareState) {
+      setFormError("Сумма процентов распределения характеристик должна быть равна 100.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       title,
       details,
@@ -280,6 +337,10 @@ export default function TasksPage() {
       startTime: startTime || null,
       endTime: endTime || null,
       attributes: selectedAttributes,
+      attributeShares: selectedAttributeShares.map((share) => ({
+        attributeType: share.attributeType,
+        percent: share.percent
+      })),
       skillIds: selectedSkills,
       habitId: selectedHabitId || null
     };
@@ -632,6 +693,14 @@ export default function TasksPage() {
                     </label>
                   ))}
                 </div>
+                {selectedAttributeShares.length > 1 && (
+                  <div className="task-attribute-share-wrapper">
+                    <SkillAttributeDistributionSlider
+                      shares={selectedAttributeShares}
+                      onChange={setSelectedAttributeShares}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="field">
@@ -681,9 +750,14 @@ export default function TasksPage() {
               </div>
 
               {formError && <div className="error">{formError}</div>}
+              {hasInvalidShareState && (
+                <div className="error">
+                  Сумма процентов распределения характеристик должна быть равна 100%.
+                </div>
+              )}
 
               <div className="button-row">
-                <button className="primary" type="submit" disabled={saving}>
+                <button className="primary" type="submit" disabled={saving || hasInvalidShareState}>
                   {saving ? "Сохраняем..." : editingTask ? "Сохранить" : "Создать"}
                 </button>
                 <button className="ghost" type="button" onClick={closeModal}>
