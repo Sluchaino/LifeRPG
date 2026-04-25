@@ -1,6 +1,7 @@
 export type AttributeType =
   | "Strength"
   | "Endurance"
+  | "Health"
   | "Intelligence"
   | "Wisdom"
   | "Agility"
@@ -10,6 +11,7 @@ export type AttributeType =
 export const ATTRIBUTE_OPTIONS: { value: AttributeType; label: string }[] = [
   { value: "Strength", label: "Сила" },
   { value: "Endurance", label: "Выносливость" },
+  { value: "Health", label: "Здоровье" },
   { value: "Intelligence", label: "Интеллект" },
   { value: "Wisdom", label: "Мудрость" },
   { value: "Agility", label: "Ловкость" },
@@ -34,6 +36,8 @@ export const ATTRIBUTE_DESCRIPTIONS: Record<AttributeType, string> = {
     "Физическая мощь, мышечный тонус, способность выполнять тяжёлую работу.",
   Endurance:
     "Общая физическая выносливость, здоровье сердечно‑сосудистой системы, иммунитет, качество сна.",
+  Health:
+    "Запас жизненной энергии и скорость восстановления организма после нагрузок.",
   Intelligence:
     "Способность к обучению, память, логическое мышление, решение сложных задач.",
   Wisdom:
@@ -49,6 +53,7 @@ export const ATTRIBUTE_DESCRIPTIONS: Record<AttributeType, string> = {
 const ATTRIBUTE_SOFT_COLORS: Record<AttributeType, string> = {
   Strength: "rgba(255, 107, 107, 0.18)",
   Endurance: "rgba(255, 179, 71, 0.18)",
+  Health: "rgba(110, 231, 183, 0.18)",
   Intelligence: "rgba(125, 211, 252, 0.18)",
   Wisdom: "rgba(94, 234, 212, 0.18)",
   Agility: "rgba(163, 230, 53, 0.18)",

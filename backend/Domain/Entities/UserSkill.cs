@@ -15,7 +15,6 @@ namespace Domain.Entities
         public int Level { get; set; }
         public int CurrentUses { get; set; }
         public int RequiredUsesForNextLevel { get; set; }
-        public int StreakDays { get; set; }
         public DateOnly? LastUsedOn { get; set; }
 
         public DateTime CreatedAtUtc { get; set; }
